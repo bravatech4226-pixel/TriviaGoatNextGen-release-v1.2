@@ -1,0 +1,373 @@
+"onboarding.header.title" = "ONBOARDING";
+"onboarding.header.subtitle" = "DEPLOY YOUR PILOT PROFILE";
+"onboarding.hero.eyebrow" = "WELCOME, PILOT";
+"onboarding.hero.title" = "DEPLOY PROFILE";
+"onboarding.hero.subtitle" = "Choose your codename, pick your squadron, then enter command.";
+"onboarding.codename.placeholder" = "ENTER CODENAME...";
+"onboarding.secure.eyebrow" = "OPTIONAL: SECURE PROFILE";
+"onboarding.secure.apple" = "SECURE WITH APPLE";
+"onboarding.engage" = "ENGAGE PROTOCOL";
+"onboarding.deploying" = "DEPLOYING…";
+
+"paywall.eyebrow" = "GO PRO";
+"paywall.title" = "ENTER GLOBAL BATTLE";
+"paywall.body" = "Start with a 3-day free trial. Enter live Global Battles, compete in real time, and climb the leaderboard.";
+"paywall.cta" = "START FREE TRIAL";
+"paywall.loading" = "LOADING OFFERS…";
+"paywall.confirming" = "CONFIRMING…";
+"paywall.restore" = "Restore";
+"paywall.not_now" = "Not now";
+"paywall.loading_offers" = "Loading offers…";
+"paywall.offers_unavailable" = "Offers unavailable right now.";
+"paywall.renewal_note" = "Cancel anytime • Renews automatically";
+"paywall.restoring" = "Restoring…";
+"paywall.overlay.restoring" = "RESTORING PRO ACCESS";
+"paywall.overlay.confirming" = "CONFIRMING PRO ACCESS";
+"paywall.overlay.body" = "Syncing your entitlement and returning you to the arena.";
+"paywall.plan.yearly" = "PRO YEARLY";
+"paywall.plan.monthly" = "PRO MONTHLY";
+"paywall.trial_line" = "3-DAY FREE TRIAL — CANCEL ANYTIME";
+"paywall.savings" = "SAVE %d%% VS MONTHLY";
+"paywall.best" = "BEST";
+"paywall.eyebrow" = "GO PRO";
+"paywall.body" = "Start with a 3-day free trial. Enter live Global Battles, compete in real time, and climb the leaderboard.";
+"paywall.best" = "BEST";
+
+"paywall.plan.yearly" = "PRO YEARLY";
+"paywall.plan.monthly" = "PRO MONTHLY";
+
+"paywall.savings" = "SAVE %d%% VS MONTHLY";
+
+"paywall.renewal_note" = "Cancel anytime • Renews automatically";
+
+"paywall.restore" = "Restore";
+"paywall.not_now" = "Not now";
+
+"onboarding.card.title" = "PROFILE GATEWAY";
+"onboarding.card.subtitle" = "Set your identity, lock your squadron, then deploy into command.";
+"onboarding.step.codename" = "STEP 1 • CODENAME";
+"onboarding.step.squadron" = "STEP 2 • SQUADRON";
+"onboarding.ready_check" = "READY CHECK";
+"onboarding.how.show" = "SHOW HOW IT WORKS";
+"onboarding.how.hide" = "HIDE HOW IT WORKS";
+"common.ok" = "OK";
+"common.pro" = "PRO";
+"common.start" = "START";
+"common.view" = "VIEW";
+"common.pilot" = "PILOT";
+
+"arena.header.title" = "ARENA";
+"arena.header.pro" = "PRO ACTIVE";
+"arena.header.free" = "FREE RUNS LIMITED";
+
+"arena.status.day_streak" = "%d DAY STREAK";
+"arena.status.no_streak" = "NO STREAK YET";
+"arena.status.mission_complete" = "MISSION COMPLETE";
+"arena.status.mission_ready" = "MISSION READY";
+
+"arena.alert.no_results.title" = "No results yet";
+"arena.alert.no_results.body" = "Complete a run to generate a Results breakdown.";
+
+"arena.hero.daily_mission" = "DAILY MISSION";
+"arena.hero.mission_complete" = "MISSION COMPLETE";
+"arena.hero.ready" = "READY TO DEPLOY";
+"arena.hero.complete_body" = "Nice. Lock tomorrow’s mission for the streak multiplier.";
+"arena.hero.ready_body" = "Fastest way to climb: curated pack + bonus XP.";
+"arena.hero.run_again" = "RUN AGAIN";
+"arena.hero.start_mission" = "START MISSION";
+"arena.hero.train" = "TRAIN";
+
+"arena.training.title" = "TRAINING ARENA";
+"arena.training.placeholder" = "ENTER TOPIC...";
+"arena.training.pro_unlocked" = "PRO UNLOCKED";
+"arena.training.free_today" = "FREE TODAY";
+
+"arena.multiplayer.title" = "MULTIPLAYER";
+"arena.global_battle.title" = "GLOBAL BATTLE";
+"arena.global_battle.open" = "Live multiplayer lobby";
+"arena.global_battle.locked" = "Pro arena. Upgrade to enter.";
+
+"arena.command.title" = "COMMAND";
+"arena.command.missions" = "MISSIONS";
+"arena.command.missions_subtitle" = "Daily pack + bonus XP";
+"arena.command.results" = "RESULTS";
+"arena.command.results_subtitle" = "Match outcomes";
+
+"arena.last_run.title" = "LAST RUN";
+"arena.last_run.summary" = "%d XP • %d correct";
+
+"arena.reward.xp" = "+%d XP";
+"arena.reward.claimed" = "REWARD CLAIMED";
+"arena.reward.vault_updated" = "Vault updated.";
+
+"arena.winner.section" = "BRAGGING RIGHTS";
+"arena.winner.current_number_one" = "CURRENT #1";
+"arena.winner.headline.syncing" = "WINNER SIGNAL LOADING…";
+"arena.winner.headline.leader_changed" = "NEW CHAMPION DETECTED";
+"arena.winner.headline.new_high_score" = "CHAMPION JUST LEVELED UP";
+"arena.winner.headline.stable" = "HELLO… I’M THE WINNER";
+"arena.winner.subhead.syncing" = "Stand by… syncing the board.";
+"arena.winner.subhead.leader_changed" = "Fresh crown holder. Tap to see the full leaderboard.";
+"arena.winner.subhead.new_high_score" = "They just extended the gap. Your move.";
+"arena.winner.subhead.stable" = "Beat the leader to claim the crown.";
+"arena.winner.badge.syncing" = "SYNCING";
+"arena.winner.badge.leader_changed" = "NEW #1";
+"arena.winner.badge.new_high_score" = "+XP";
+"arena.winner.badge.stable" = "BRAG";
+
+"arena.community.section" = "COMMUNITY PULSE";
+"arena.community.new" = "NEW";
+"arena.community.live" = "LIVE";
+"arena.community.ai_insight" = "AI INSIGHT";
+"arena.community.community" = "COMMUNITY";"welcome.rookie" = "ROOKIE";
+"welcome.title" = "WELCOME TO";
+"welcome.brand" = "TRIVIAGOAT";
+"welcome.subtitle" = "THE GOAT IS WATCHING.";
+"welcome.goat_mode" = "GOAT MODE";
+"welcome.you_are_in" = "YOU’RE IN, %@";
+"welcome.hero.body" = "Sharpen your knowledge. Build streaks. Own the arena.";
+"welcome.card.play" = "PLAY";
+"welcome.card.fast" = "FAST";
+"welcome.card.build" = "BUILD";
+"welcome.card.streaks" = "STREAKS";
+"welcome.card.climb" = "CLIMB";
+"welcome.card.ranks" = "RANKS";
+"welcome.ready" = "Your profile is ready.";
+"welcome.first_run" = "Your first run starts now.";
+"welcome.start_mission" = "START DAILY MISSION";
+"welcome.training" = "ENTER TRAINING ARENA";
+"welcome.hq" = "GO TO HQ";
+"leaderboard.title" = "LEADERBOARD";
+"leaderboard.subtitle" = "TOP PILOTS • LIVE";
+"leaderboard.back_to_hq" = "BACK TO HQ";
+
+"leaderboard.info.title" = "You’re looking at LIVE XP ranks.";
+"leaderboard.info.body" = "Play Missions to earn XP • Rank movement animates after big gains.";
+
+"leaderboard.play_again" = "PLAY AGAIN";
+"leaderboard.hq" = "HQ";
+"leaderboard.xp" = "XP";
+
+"leaderboard.landing.title" = "THIS IS THE XP LEADERBOARD.";
+"leaderboard.landing.body" = "Play Missions to earn XP.";
+"leaderboard.landing.subbody" = "Climb ranks in real time.";
+"leaderboard.landing.hint" = "Use Back to HQ to start a Mission.";
+"leaderboard.landing.got_it" = "GOT IT";
+
+"leaderboard.how.title" = "HOW THIS WORKS";
+"leaderboard.how.bullet1" = "Earn XP by playing Missions.";
+"leaderboard.how.bullet2" = "Higher XP = higher rank. This list updates live.";
+"leaderboard.how.bullet3" = "After major gains, your row animates to its new position.";
+"leaderboard.how.bullet4" = "Use PLAY AGAIN to continue the solo flow.";
+
+"leaderboard.go_to_hq" = "GO TO HQ";
+"leaderboard.your_rank" = "YOUR RANK";
+"leaderboard.outside_top_25" = "OUTSIDE TOP 25";
+"common.share" = "SHARE";
+"common.copy" = "COPY";
+"common.copied" = "COPIED";
+"common.you" = "YOU";
+
+"global.lobby.title" = "GLOBAL LOBBY";
+"global.lobby.host_command" = "HOST COMMAND";
+"global.lobby.host_standing_by" = "HOST STANDING BY";
+"global.lobby.code" = "LOBBY CODE";
+"global.lobby.code_help" = "Share this code so players can enter the battle lobby and get into the experience fast.";
+
+"global.lobby.players" = "PLAYERS";
+"global.lobby.max" = "MAX";
+"global.lobby.status" = "STATUS";
+"global.lobby.live_roster" = "LIVE ROSTER";
+"global.lobby.no_pilots" = "No pilots in lobby yet.";
+
+"global.lobby.host" = "HOST";
+"global.lobby.pilot" = "PILOT";
+"global.lobby.points" = "PTS";
+
+"global.lobby.launching" = "LAUNCHING...";
+"global.lobby.start_match" = "START MATCH";
+"global.lobby.need_players" = "Need at least %d pilots to launch.";
+"global.lobby.host_will_launch" = "HOST WILL LAUNCH THE BATTLE";
+"global.lobby.wait_for_host_body" = "Stay ready. You will route into the live battle automatically when the host launches.";
+
+"global.lobby.command_status" = "COMMAND STATUS";
+"global.lobby.roster" = "ROSTER";
+"global.lobby.syncing_state" = "SYNCING LOBBY STATE";
+"global.lobby.you_control_launch" = "YOU CONTROL BATTLE LAUNCH";
+"global.lobby.waiting_more_pilots" = "WAITING FOR MORE PILOTS";
+"global.lobby.waiting_for_host" = "WAITING FOR HOST";
+
+"global.lobby.phase.idle" = "IDLE";
+"global.lobby.phase.creating" = "CREATING";
+"global.lobby.phase.joining" = "JOINING";
+"global.lobby.phase.ready" = "READY";
+"global.lobby.phase.live" = "LIVE";
+"global.lobby.phase.done" = "DONE";
+"global.lobby.phase.error" = "ERROR";
+
+"global.lobby.leave.title" = "Leave Global Lobby?";
+"global.lobby.leave.stay" = "Stay";
+"global.lobby.leave.confirm" = "Leave";
+"global.lobby.leave.body" = "Leaving now will remove you from the lobby and return you to HQ.";
+
+"global.lobby.share.full" = "Join my TriviaGoat Global Battle 🚀\n\nTap to join instantly:\ntriviagoat://join?code=%@\n\nOr enter manually:\nLobby Code: %@\n\nDownload the app:\n%@";
+"global.lobby.share.code_only" = "Join my TriviaGoat Global Battle 🚀\n\nTap to join instantly:\ntriviagoat://join?code=%@\n\nOr enter manually:\nLobby Code: %@";
+"global.entry.title" = "GLOBAL BATTLE";
+"global.entry.subtitle" = "PUBLIC MATCH NETWORK";
+"global.entry.live" = "LIVE";
+"global.entry.offline" = "OFFLINE";
+"global.entry.off" = "OFF";
+
+"global.entry.launch_control" = "LAUNCH CONTROL";
+"global.entry.access_enabled" = "Global Battle access is enabled for this account.";
+"global.entry.access_disabled" = "Global Battles are not available for this account.";
+
+"global.entry.world_stage" = "WORLD STAGE";
+"global.entry.live_network" = "LIVE NETWORK";
+"global.entry.hero_body" = "Create a global lobby or join one by code. Hosts control launch. Pick your answer fast, then lock it in before time expires.";
+"global.entry.hero_warning" = "Selected answers do not count until they are locked.";
+
+"global.entry.current_state" = "CURRENT STATE";
+"global.entry.ready" = "Ready";
+"global.entry.state.shell" = "Screen Shell";
+"global.entry.state.session" = "Session Wiring";
+"global.entry.state.session_ready" = "Create + join ready";
+"global.entry.state.roster" = "Roster Observation";
+"global.entry.state.listener_ready" = "Realtime listener ready";
+"global.entry.state.handoff" = "Lobby Handoff";
+"global.entry.state.stabilized" = "Stabilized";
+"global.entry.state.access" = "Battle Access";
+"global.entry.state.access_enabled" = "Access enabled";
+"global.entry.state.access_disabled" = "Access disabled";
+
+"global.entry.live_flow" = "LIVE FLOW";
+"global.entry.flow.host_create" = "Host creates lobby";
+"global.entry.flow.join_code" = "Players join by code";
+"global.entry.flow.lock_answer" = "Pick an answer, then lock it in";
+"global.entry.flow.sync_live" = "Host launches and match state syncs live";
+
+"global.entry.creating" = "CREATING...";
+"global.entry.create_lobby" = "CREATE GLOBAL LOBBY";
+"global.entry.join_by_code" = "JOIN BY CODE";
+"global.entry.enter_code" = "ENTER 6-CHAR CODE";
+"global.entry.joining" = "JOINING...";
+"global.entry.join_lobby" = "JOIN LOBBY";
+"global.entry.active_code" = "ACTIVE CODE: %@";
+"global.entry.action_help" = "Create a live lobby or join one with a code. Hosts control launch. Answers only count when locked in.";
+
+"global.entry.status" = "GLOBAL STATUS";
+"global.entry.phase.standby" = "STANDBY";
+"global.entry.phase.creating_lobby" = "CREATING LOBBY";
+"global.entry.phase.joining_lobby" = "JOINING LOBBY";
+"global.entry.phase.lobby_ready" = "LOBBY READY";
+"global.entry.phase.match_live" = "MATCH LIVE";
+"global.entry.phase.match_finished" = "MATCH FINISHED";
+"global.entry.phase.action_failed" = "ACTION FAILED";
+"community.title" = "COMMUNITY";
+"community.subtitle.new" = "NEW SIGNALS LIVE";
+"community.subtitle.standby" = "STANDBY MODE";
+"community.subtitle.activity" = "AI + PLAYER ACTIVITY";
+"community.subtitle.feed" = "COMMUNITY FEED";
+
+"community.live_controls" = "LIVE CONTROLS";
+"community.live" = "LIVE";
+"community.sync" = "SYNC";
+"community.syncing" = "SYNCING...";
+"community.updated" = "UPDATED";
+"community.refresh" = "REFRESH";
+"community.placeholder" = "PLACEHOLDER";
+"community.standby" = "STANDBY";
+
+"community.seeding" = "SEEDING...";
+"community.seed_live_content" = "SEED LIVE CONTENT";
+"community.refresh.success" = "Live pulse updated successfully.";
+"community.refresh.syncing_body" = "Pulling the latest approved posts from the live feed.";
+"community.refresh.seed_body" = "Seed real community launch posts, then refresh this surface.";
+"community.refresh.live_body" = "Real pulse is live. Manual refresh force-checks the latest approved posts.";
+
+"community.featured_ai" = "FEATURED AI";
+"community.goat_intelligence" = "GOAT INTELLIGENCE";
+"community.signal" = "COMMUNITY SIGNAL";
+"community.ai_insight" = "AI INSIGHT";
+"community.ai_signal" = "AI SIGNAL";
+"community.player_signal" = "PLAYER SIGNAL";
+"community.recent_pulse" = "RECENT PULSE";
+
+"community.empty.title" = "COMMUNITY STANDBY";
+"community.empty.body" = "Fresh AI insights and player activity will appear here.";
+"settings.title" = "SETTINGS";
+"settings.profile" = "PROFILE";
+"settings.readability" = "READABILITY";
+"settings.audio" = "AUDIO";
+"settings.share" = "SHARE";
+"settings.help_legal" = "HELP + LEGAL";
+"settings.done" = "DONE";
+"paywall.error.title" = "Purchase issue";
+"common.ok" = "OK";
+"paywall.error.confirm_failed" = "Couldn’t confirm Pro access. Please try Restore or try again.";
+"paywall.error.no_restore" = "No active Pro subscription was found to restore.";
+"global.match.leave.title" = "Leave Battle?";
+"global.match.leave.stay" = "Stay";
+"global.match.leave.confirm" = "Leave";
+"global.match.leave.body" = "Leaving now will exit the live battle and return you to HQ.";
+"leaderboard.syncing_pilots" = "SYNCING PILOTS…";
+"leaderboard.next.pass" = "%d XP to pass %@";
+"leaderboard.next.tied" = "You’re tied — one more clean win to move up.";
+"leaderboard.next.defend_crown" = "You’re #1 — defend the crown.";
+"leaderboard.next.enter_top" = "%d XP to enter TOP %d";
+"onboarding.error.title" = "Deployment failed";
+"onboarding.error.try_different" = "Please try a different codename.";
+"onboarding.codename.invalid_requirements" = "Codename must meet all requirements before deployment.";
+
+"onboarding.ready.codename" = "CODENAME";
+"onboarding.ready.squadron" = "SQUADRON";
+"onboarding.ready.deploy" = "DEPLOY";
+
+"onboarding.team.striker.body" = "Striker pilots push first and set the pace.";
+"onboarding.team.titan.body" = "Titan pilots hold firm and absorb pressure.";
+"onboarding.team.phantom.body" = "Phantom pilots strike quietly and stay unpredictable.";
+
+"onboarding.how.title" = "HOW IT WORKS";
+"onboarding.how.step1.title" = "Deploy your identity";
+"onboarding.how.step1.body" = "Choose a codename and squadron to establish your pilot profile.";
+"onboarding.how.step2.title" = "Protect your progress";
+"onboarding.how.step2.body" = "Sign in with Apple is optional and helps secure your profile, XP, leaderboard standing, and progress across devices.";
+"onboarding.how.step3.title" = "Enter Arena command";
+"onboarding.how.step3.body" = "You’ll land in HQ where missions, training, global battles, community, and results route from one place.";
+"onboarding.how.step4.title" = "Build streaks and XP";
+"onboarding.how.step4.body" = "Correct answers stack momentum, improve results, and help you climb faster.";
+
+"onboarding.overlay.restoring" = "RESTORING PROFILE";
+"onboarding.overlay.deploying" = "DEPLOYING PILOT";
+"onboarding.overlay.restoring_body" = "Securing your profile with Apple";
+"onboarding.overlay.deploying_body" = "Initializing command interface";
+
+"onboarding.validation.enter" = "Enter your codename to deploy.";
+"onboarding.validation.length" = "Use 3–16 characters.";
+"onboarding.validation.allowed" = "Use only letters, numbers, and underscores.";
+"onboarding.validation.edge_underscore" = "Codename cannot start or end with underscores.";
+"onboarding.validation.double_underscore" = "Codename cannot contain repeated underscores.";
+"onboarding.validation.reserved" = "That codename is reserved. Choose another.";
+"onboarding.validation.ready" = "Looks good. Ready to deploy.";
+"results.run_complete" = "RUN COMPLETE";
+"results.streak.one_day" = "1 DAY STREAK";
+"results.streak.days" = "%d DAY STREAK";
+"results.streak.empty" = "Complete a run to ignite your streak.";
+"results.streak.day_one_locked" = "Day 1 locked in.";
+"results.streak.progress" = "Day %d → Day %d";
+
+"results.total_xp" = "TOTAL XP";
+
+"results.run_required" = "RUN REQUIRED";
+"results.no_results_yet" = "No Results Yet";
+"results.empty.body" = "Complete a run to generate your XP breakdown and streak update.";
+
+"results.protocol_complete" = "PROTOCOL COMPLETE";
+"results.breakdown" = "BREAKDOWN";
+"results.rank_progress" = "RANK PROGRESS";
+
+"results.max_tier" = "MAX TIER — YOU’RE THE BENCHMARK.";
+
+"results.claim_to_continue" = "Claim your reward to continue.";
+"results.claim_glory" = "CLAIM GLORY";
+"results.back_to_arena" = "BACK TO ARENA";

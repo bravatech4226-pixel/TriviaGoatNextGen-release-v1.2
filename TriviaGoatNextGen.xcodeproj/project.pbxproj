@@ -1,0 +1,721 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		37062A3C2F323CC500650524 /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = 37062A3B2F323CC500650524 /* FirebaseAnalytics */; };
+		37062A3E2F323CC500650524 /* FirebaseAppCheck in Frameworks */ = {isa = PBXBuildFile; productRef = 37062A3D2F323CC500650524 /* FirebaseAppCheck */; };
+		37062A402F323CC500650524 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 37062A3F2F323CC500650524 /* FirebaseAuth */; };
+		37062A422F323CC500650524 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 37062A412F323CC500650524 /* FirebaseFirestore */; };
+		37062A442F323CC500650524 /* FirebaseFunctions in Frameworks */ = {isa = PBXBuildFile; productRef = 37062A432F323CC500650524 /* FirebaseFunctions */; };
+		37062A4D2F323E5000650524 /* StoreKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 37062A4C2F323E5000650524 /* StoreKit.framework */; };
+		3710FF922F54CDA500162727 /* TreasureChestSceneView.scn in Resources */ = {isa = PBXBuildFile; fileRef = 3710FF912F54CDA500162727 /* TreasureChestSceneView.scn */; };
+		3715C8632F3E844C003BD86B /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = 3715C8622F3E844C003BD86B /* FirebaseMessaging */; };
+		3715C8772F3FA2FC003BD86B /* FirebaseDatabase in Frameworks */ = {isa = PBXBuildFile; productRef = 3715C8762F3FA2FC003BD86B /* FirebaseDatabase */; };
+		3718C3282F50B818004C846B /* TriviaGoatNextGenStorekit.storekit in Resources */ = {isa = PBXBuildFile; fileRef = 3718C3272F50B818004C846B /* TriviaGoatNextGenStorekit.storekit */; };
+		376B54AF2F91876700A68287 /* Algorithms in Frameworks */ = {isa = PBXBuildFile; productRef = 376B54AE2F91876700A68287 /* Algorithms */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		37062A0A2F3237F600650524 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 370629F22F3237F500650524 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 370629F92F3237F500650524;
+			remoteInfo = TriviaGoatNextGen;
+		};
+		37062A142F3237F600650524 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 370629F22F3237F500650524 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 370629F92F3237F500650524;
+			remoteInfo = TriviaGoatNextGen;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		370629FA2F3237F500650524 /* TriviaGoatNextGen.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TriviaGoatNextGen.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		37062A092F3237F600650524 /* TriviaGoatNextGenTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TriviaGoatNextGenTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		37062A132F3237F600650524 /* TriviaGoatNextGenUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TriviaGoatNextGenUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		37062A4C2F323E5000650524 /* StoreKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = StoreKit.framework; path = System/Library/Frameworks/StoreKit.framework; sourceTree = SDKROOT; };
+		3710FF912F54CDA500162727 /* TreasureChestSceneView.scn */ = {isa = PBXFileReference; lastKnownFileType = file.bplist; path = TreasureChestSceneView.scn; sourceTree = "<group>"; };
+		3718C3272F50B818004C846B /* TriviaGoatNextGenStorekit.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = TriviaGoatNextGenStorekit.storekit; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		37BA8D3F2F32C2E800C383F7 /* Exceptions for "TriviaGoatNextGen" folder in "TriviaGoatNextGen" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 370629F92F3237F500650524 /* TriviaGoatNextGen */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		370629FC2F3237F500650524 /* TriviaGoatNextGen */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				37BA8D3F2F32C2E800C383F7 /* Exceptions for "TriviaGoatNextGen" folder in "TriviaGoatNextGen" target */,
+			);
+			path = TriviaGoatNextGen;
+			sourceTree = "<group>";
+		};
+		37062A0C2F3237F600650524 /* TriviaGoatNextGenTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = TriviaGoatNextGenTests;
+			sourceTree = "<group>";
+		};
+		37062A162F3237F600650524 /* TriviaGoatNextGenUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = TriviaGoatNextGenUITests;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		370629F72F3237F500650524 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				376B54AF2F91876700A68287 /* Algorithms in Frameworks */,
+				37062A3E2F323CC500650524 /* FirebaseAppCheck in Frameworks */,
+				37062A422F323CC500650524 /* FirebaseFirestore in Frameworks */,
+				3715C8632F3E844C003BD86B /* FirebaseMessaging in Frameworks */,
+				37062A442F323CC500650524 /* FirebaseFunctions in Frameworks */,
+				37062A4D2F323E5000650524 /* StoreKit.framework in Frameworks */,
+				37062A402F323CC500650524 /* FirebaseAuth in Frameworks */,
+				3715C8772F3FA2FC003BD86B /* FirebaseDatabase in Frameworks */,
+				37062A3C2F323CC500650524 /* FirebaseAnalytics in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		37062A062F3237F600650524 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		37062A102F3237F600650524 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		370629F12F3237F500650524 = {
+			isa = PBXGroup;
+			children = (
+				370629FC2F3237F500650524 /* TriviaGoatNextGen */,
+				3710FF912F54CDA500162727 /* TreasureChestSceneView.scn */,
+				3718C3272F50B818004C846B /* TriviaGoatNextGenStorekit.storekit */,
+				37062A4B2F323E5000650524 /* Frameworks */,
+				370629FB2F3237F500650524 /* Products */,
+				37062A0C2F3237F600650524 /* TriviaGoatNextGenTests */,
+				37062A162F3237F600650524 /* TriviaGoatNextGenUITests */,
+			);
+			sourceTree = "<group>";
+		};
+		370629FB2F3237F500650524 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				370629FA2F3237F500650524 /* TriviaGoatNextGen.app */,
+				37062A092F3237F600650524 /* TriviaGoatNextGenTests.xctest */,
+				37062A132F3237F600650524 /* TriviaGoatNextGenUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		37062A4B2F323E5000650524 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				37062A4C2F323E5000650524 /* StoreKit.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		370629F92F3237F500650524 /* TriviaGoatNextGen */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 37062A1D2F3237F600650524 /* Build configuration list for PBXNativeTarget "TriviaGoatNextGen" */;
+			buildPhases = (
+				370629F62F3237F500650524 /* Sources */,
+				370629F72F3237F500650524 /* Frameworks */,
+				370629F82F3237F500650524 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				370629FC2F3237F500650524 /* TriviaGoatNextGen */,
+			);
+			name = TriviaGoatNextGen;
+			packageProductDependencies = (
+				37062A3B2F323CC500650524 /* FirebaseAnalytics */,
+				37062A3D2F323CC500650524 /* FirebaseAppCheck */,
+				37062A3F2F323CC500650524 /* FirebaseAuth */,
+				37062A412F323CC500650524 /* FirebaseFirestore */,
+				37062A432F323CC500650524 /* FirebaseFunctions */,
+				3715C8622F3E844C003BD86B /* FirebaseMessaging */,
+				3715C8762F3FA2FC003BD86B /* FirebaseDatabase */,
+				376B54AE2F91876700A68287 /* Algorithms */,
+			);
+			productName = TriviaGoatNextGen;
+			productReference = 370629FA2F3237F500650524 /* TriviaGoatNextGen.app */;
+			productType = "com.apple.product-type.application";
+		};
+		37062A082F3237F600650524 /* TriviaGoatNextGenTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 37062A202F3237F600650524 /* Build configuration list for PBXNativeTarget "TriviaGoatNextGenTests" */;
+			buildPhases = (
+				37062A052F3237F600650524 /* Sources */,
+				37062A062F3237F600650524 /* Frameworks */,
+				37062A072F3237F600650524 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				37062A0B2F3237F600650524 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				37062A0C2F3237F600650524 /* TriviaGoatNextGenTests */,
+			);
+			name = TriviaGoatNextGenTests;
+			packageProductDependencies = (
+			);
+			productName = TriviaGoatNextGenTests;
+			productReference = 37062A092F3237F600650524 /* TriviaGoatNextGenTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		37062A122F3237F600650524 /* TriviaGoatNextGenUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 37062A232F3237F600650524 /* Build configuration list for PBXNativeTarget "TriviaGoatNextGenUITests" */;
+			buildPhases = (
+				37062A0F2F3237F600650524 /* Sources */,
+				37062A102F3237F600650524 /* Frameworks */,
+				37062A112F3237F600650524 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				37062A152F3237F600650524 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				37062A162F3237F600650524 /* TriviaGoatNextGenUITests */,
+			);
+			name = TriviaGoatNextGenUITests;
+			packageProductDependencies = (
+			);
+			productName = TriviaGoatNextGenUITests;
+			productReference = 37062A132F3237F600650524 /* TriviaGoatNextGenUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		370629F22F3237F500650524 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2620;
+				LastUpgradeCheck = 2620;
+				TargetAttributes = {
+					370629F92F3237F500650524 = {
+						CreatedOnToolsVersion = 26.2;
+					};
+					37062A082F3237F600650524 = {
+						CreatedOnToolsVersion = 26.2;
+						TestTargetID = 370629F92F3237F500650524;
+					};
+					37062A122F3237F600650524 = {
+						CreatedOnToolsVersion = 26.2;
+						TestTargetID = 370629F92F3237F500650524;
+					};
+				};
+			};
+			buildConfigurationList = 370629F52F3237F500650524 /* Build configuration list for PBXProject "TriviaGoatNextGen" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+				es,
+				fr,
+			);
+			mainGroup = 370629F12F3237F500650524;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				37062A3A2F323CC500650524 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+				376B54AD2F91876700A68287 /* XCRemoteSwiftPackageReference "swift-algorithms" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 370629FB2F3237F500650524 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				370629F92F3237F500650524 /* TriviaGoatNextGen */,
+				37062A082F3237F600650524 /* TriviaGoatNextGenTests */,
+				37062A122F3237F600650524 /* TriviaGoatNextGenUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		370629F82F3237F500650524 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		37062A072F3237F600650524 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				3718C3282F50B818004C846B /* TriviaGoatNextGenStorekit.storekit in Resources */,
+				3710FF922F54CDA500162727 /* TreasureChestSceneView.scn in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		37062A112F3237F600650524 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		370629F62F3237F500650524 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		37062A052F3237F600650524 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		37062A0F2F3237F600650524 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		37062A0B2F3237F600650524 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 370629F92F3237F500650524 /* TriviaGoatNextGen */;
+			targetProxy = 37062A0A2F3237F600650524 /* PBXContainerItemProxy */;
+		};
+		37062A152F3237F600650524 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 370629F92F3237F500650524 /* TriviaGoatNextGen */;
+			targetProxy = 37062A142F3237F600650524 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		37062A1B2F3237F600650524 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = B337MWPBNT;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		37062A1C2F3237F600650524 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = B337MWPBNT;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		37062A1E2F3237F600650524 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = TriviaGoatNextGen/TriviaGoatNextGen.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 15;
+				DEVELOPMENT_TEAM = B337MWPBNT;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = TriviaGoatNextGen/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Trivia GOAT Next Gen";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.trivia-games";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.home2b.triviagoat;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		37062A1F2F3237F600650524 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = TriviaGoatNextGen/TriviaGoatNextGen.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 15;
+				DEVELOPMENT_TEAM = B337MWPBNT;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = TriviaGoatNextGen/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Trivia GOAT Next Gen";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.trivia-games";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.home2b.triviagoat;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		37062A212F3237F600650524 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = B337MWPBNT;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.home2b.goattrivia.TriviaGoatNextGenTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/TriviaGoatNextGen.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/TriviaGoatNextGen";
+			};
+			name = Debug;
+		};
+		37062A222F3237F600650524 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = B337MWPBNT;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.home2b.goattrivia.TriviaGoatNextGenTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/TriviaGoatNextGen.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/TriviaGoatNextGen";
+			};
+			name = Release;
+		};
+		37062A242F3237F600650524 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = B337MWPBNT;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.home2b.goattrivia.TriviaGoatNextGenUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = TriviaGoatNextGen;
+			};
+			name = Debug;
+		};
+		37062A252F3237F600650524 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = B337MWPBNT;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.home2b.goattrivia.TriviaGoatNextGenUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = TriviaGoatNextGen;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		370629F52F3237F500650524 /* Build configuration list for PBXProject "TriviaGoatNextGen" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				37062A1B2F3237F600650524 /* Debug */,
+				37062A1C2F3237F600650524 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		37062A1D2F3237F600650524 /* Build configuration list for PBXNativeTarget "TriviaGoatNextGen" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				37062A1E2F3237F600650524 /* Debug */,
+				37062A1F2F3237F600650524 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		37062A202F3237F600650524 /* Build configuration list for PBXNativeTarget "TriviaGoatNextGenTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				37062A212F3237F600650524 /* Debug */,
+				37062A222F3237F600650524 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		37062A232F3237F600650524 /* Build configuration list for PBXNativeTarget "TriviaGoatNextGenUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				37062A242F3237F600650524 /* Debug */,
+				37062A252F3237F600650524 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		37062A3A2F323CC500650524 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 12.8.0;
+			};
+		};
+		376B54AD2F91876700A68287 /* XCRemoteSwiftPackageReference "swift-algorithms" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/apple/swift-algorithms.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.2.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		37062A3B2F323CC500650524 /* FirebaseAnalytics */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 37062A3A2F323CC500650524 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAnalytics;
+		};
+		37062A3D2F323CC500650524 /* FirebaseAppCheck */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 37062A3A2F323CC500650524 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAppCheck;
+		};
+		37062A3F2F323CC500650524 /* FirebaseAuth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 37062A3A2F323CC500650524 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAuth;
+		};
+		37062A412F323CC500650524 /* FirebaseFirestore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 37062A3A2F323CC500650524 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseFirestore;
+		};
+		37062A432F323CC500650524 /* FirebaseFunctions */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 37062A3A2F323CC500650524 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseFunctions;
+		};
+		3715C8622F3E844C003BD86B /* FirebaseMessaging */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 37062A3A2F323CC500650524 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseMessaging;
+		};
+		3715C8762F3FA2FC003BD86B /* FirebaseDatabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 37062A3A2F323CC500650524 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseDatabase;
+		};
+		376B54AE2F91876700A68287 /* Algorithms */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 376B54AD2F91876700A68287 /* XCRemoteSwiftPackageReference "swift-algorithms" */;
+			productName = Algorithms;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 370629F22F3237F500650524 /* Project object */;
+}
