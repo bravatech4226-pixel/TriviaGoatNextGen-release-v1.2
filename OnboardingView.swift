@@ -23,9 +23,7 @@ struct OnboardingView: View {
 
     @State private var invalidNameShakeTick: Int = 0
     @State private var fieldGlowPulse: Bool = false
-
-    @State private var pendingWelcomeName: String = ""
-    @State private var showWelcomeScreen: Bool = false
+    
     @State private var hasTriggeredCompletion: Bool = false
 
     var body: some View {
@@ -71,7 +69,7 @@ struct OnboardingView: View {
                     .disabled(appRef.isBusy)
                 }
 
-                if appRef.isBusy {
+                if appRef.isBusy || didTapEngage || didTapRestore {
                     deployOverlay
                         .transition(.opacity)
                         .zIndex(40)
@@ -86,15 +84,7 @@ struct OnboardingView: View {
             } message: {
                 Text(app.onboardingErrorMessage ?? "onboarding.error.try_different".localized)
             }
-            .fullScreenCover(isPresented: $showWelcomeScreen) {
-                WelcomeToTriviaGoatView(
-                    playerName: pendingWelcomeName,
-                    onStartDailyMission: routeToHQ,
-                    onEnterTrainingArena: routeToHQ,
-                    onGoToHQ: routeToHQ
-                )
-                .environmentObject(app)
-            }
+            
             .onAppear {
                 didTapRestore = false
                 SpatialAudioManager.shared.transition(to: .hq, force: true)
@@ -105,19 +95,12 @@ struct OnboardingView: View {
                 prefillExistingCodenameIfNeeded()
             }
             .onChange(of: app.welcomeState) { _, newValue in
-                guard let welcome = newValue else { return }
+                guard newValue != nil else { return }
                 guard !hasTriggeredCompletion else { return }
 
                 hasTriggeredCompletion = true
                 didTapEngage = false
                 didTapRestore = false
-
-                pendingWelcomeName = welcome.playerName
-
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                    guard app.welcomeState != nil else { return }
-                    showWelcomeScreen = true
-                }
             }
             .onChange(of: app.onboardingErrorMessage) { _, newValue in
                 let hasError = !(newValue?
@@ -503,10 +486,20 @@ struct OnboardingView: View {
     }
 
     private func engageButton(appRef: AppState) -> some View {
-        Button {
+        let isWorking = didTapEngage || appRef.isBusy
+        let canEngage = isNameValid && !isWorking && !didTapRestore
+
+        return Button {
+            guard canEngage else {
+                HapticManager.instance.errorJolt()
+                SpatialAudioManager.shared.play(.wrong)
+                invalidNameShakeTick += 1
+                return
+            }
+
             engage(appRef: appRef)
         } label: {
-            Text((didTapEngage || appRef.isBusy) ? "onboarding.deploying".localized : "onboarding.engage".localized)
+            Text(isWorking ? "onboarding.deploying".localized : "onboarding.engage".localized)
                 .font(.system(size: 16, weight: .black, design: .monospaced))
                 .lineLimit(1)
                 .minimumScaleFactor(0.72)
@@ -515,12 +508,13 @@ struct OnboardingView: View {
         }
         .buttonStyle(
             ChunkyButtonStyle(
-                color: (didTapEngage || appRef.isBusy)
-                ? .orange.opacity(0.72)
-                : (isNameValid ? .orange : .gray.opacity(0.35))
+                color: isWorking
+                    ? .orange.opacity(0.72)
+                    : (canEngage ? .orange : Color.white.opacity(0.18))
             )
         )
-        .disabled(appRef.isBusy || didTapEngage || didTapRestore)
+        .disabled(!canEngage)
+        .opacity(canEngage || isWorking ? 1.0 : 0.58)
         .pressScale()
     }
 
@@ -867,7 +861,6 @@ struct OnboardingView: View {
         guard !isPlaceholder else { return }
 
         name = existingName
-        pendingWelcomeName = existingName
     }
 
     private func engage(appRef: AppState) {
@@ -882,7 +875,6 @@ struct OnboardingView: View {
             return
         }
 
-        pendingWelcomeName = n
         didTapEngage = true
         didTapRestore = false
         hasTriggeredCompletion = false
@@ -895,16 +887,7 @@ struct OnboardingView: View {
             appRef.completeOnboarding(name: n, team: selectedTeam)
         }
     }
-
-    private func routeToHQ() {
-        showWelcomeScreen = false
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.10) {
-            withAnimation(.easeInOut(duration: 0.35)) {
-                app.setRoute(.hq)
-            }
-        }
-    }
+    
 
     private func startAmbientAnimations() {
         withAnimation(.easeInOut(duration: 2.8).repeatForever(autoreverses: true)) {

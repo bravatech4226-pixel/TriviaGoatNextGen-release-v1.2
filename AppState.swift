@@ -1622,8 +1622,16 @@ final class AppState: ObservableObject {
     
     func completeOnboarding(name: String, team: TacticalTeam) {
         let cleaned = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !cleaned.isEmpty else { return }
-        guard !isBusy else { return }
+
+        guard !cleaned.isEmpty else {
+            onboardingErrorMessage = "Please enter a codename to continue."
+            return
+        }
+
+        guard !isBusy else {
+            onboardingErrorMessage = "Deployment is already in progress. Please wait."
+            return
+        }
         
         onboardingErrorMessage = nil
         isBusy = true
@@ -1644,6 +1652,14 @@ final class AppState: ObservableObject {
                 self.user = Auth.auth().currentUser
                 
                 let claimed = try await UsernameClient().claim(username: cleaned)
+
+                guard !claimed.username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                    throw NSError(
+                        domain: "AppState",
+                        code: 4102,
+                        userInfo: [NSLocalizedDescriptionKey: "That codename couldn’t be deployed. Try a different codename."]
+                    )
+                }
                 
                 self.profile.displayName = claimed.username
                 self.profile.team = team
