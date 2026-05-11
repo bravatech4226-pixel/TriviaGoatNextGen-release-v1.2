@@ -800,6 +800,8 @@ final class AppState: ObservableObject {
         let resolvedUser = Auth.auth().currentUser
         self.user = resolvedUser
         
+        PushNotificationManager.shared.syncTokenForCurrentUserIfPossible()
+        
         let uid: String?
         if let directUID = resolvedUser?.uid, !directUID.isEmpty {
             uid = directUID
