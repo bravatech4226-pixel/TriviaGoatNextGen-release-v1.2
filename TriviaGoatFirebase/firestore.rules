@@ -264,61 +264,77 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // --------------------
-    // EVENTS
-    // --------------------
-    match /events/{eventId} {
-      allow read: if true;
-      allow create, update: if isWebAdmin();
-      allow delete: if false;
+   // --------------------
+// EVENTS
+// --------------------
+match /events/{eventId} {
+  allow read: if true;
+  allow create: if isWebAdmin();
 
-      match /accessLeads/{leadId} {
-        allow read: if isWebAdmin();
-        allow create: if true;
-        allow update: if isWebAdmin();
-        allow delete: if false;
-      }
+  allow update: if isWebAdmin()
+    || (
+      signedIn()
+      && request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(["attendeeCount", "rsvpCount", "waitlistCount", "updatedAt"])
+    );
 
-      match /accessRequests/{uid} {
-        allow read: if isWebAdmin() || isSelf(uid);
-        allow create: if signedIn() && isSelf(uid);
-        allow update: if isWebAdmin();
-        allow delete: if false;
-      }
+  allow delete: if false;
 
-      match /invites/{uid} {
-        allow read: if isWebAdmin() || isSelf(uid);
-        allow create, update: if isWebAdmin();
-        allow delete: if false;
-      }
+  match /rsvps/{uid} {
+    allow read: if isWebAdmin() || isSelf(uid);
 
-      match /waitlist/{uid} {
-        allow read: if isWebAdmin() || isSelf(uid);
-        allow create: if signedIn() && isSelf(uid);
-        allow update: if isWebAdmin();
-        allow delete: if false;
-      }
-    }
+    allow create: if signedIn()
+      && isSelf(uid)
+      && request.resource.data.uid == uid
+      && request.resource.data.status in ["confirmed", "registered"];
 
-    match /{path=**}/accessLeads/{leadId} {
-      allow read: if isWebAdmin();
-      allow update: if isWebAdmin();
-    }
+    allow update: if isWebAdmin()
+      || (
+        signedIn()
+        && isSelf(uid)
+        && request.resource.data.uid == uid
+      );
 
-    match /{path=**}/accessRequests/{uid} {
-      allow read: if isWebAdmin() || isSelf(uid);
-      allow update: if isWebAdmin();
-    }
+    allow delete: if false;
+  }
 
-    match /{path=**}/invites/{uid} {
-      allow read: if isWebAdmin() || isSelf(uid);
-      allow update: if isWebAdmin();
-    }
+  match /accessLeads/{leadId} {
+    allow read: if isWebAdmin();
+    allow create: if true;
+    allow update: if isWebAdmin();
+    allow delete: if false;
+  }
 
-    match /{path=**}/waitlist/{uid} {
-      allow read: if isWebAdmin() || isSelf(uid);
-      allow update: if isWebAdmin();
-    }
+  match /accessRequests/{uid} {
+    allow read: if isWebAdmin() || isSelf(uid);
+    allow create: if signedIn() && isSelf(uid);
+    allow update: if isWebAdmin();
+    allow delete: if false;
+  }
+
+  match /invites/{uid} {
+    allow read: if isWebAdmin() || isSelf(uid);
+    allow create, update: if isWebAdmin();
+    allow delete: if false;
+  }
+
+  match /waitlist/{uid} {
+    allow read: if isWebAdmin() || isSelf(uid);
+
+    allow create: if signedIn()
+      && isSelf(uid)
+      && request.resource.data.uid == uid;
+
+    allow update: if isWebAdmin()
+      || (
+        signedIn()
+        && isSelf(uid)
+        && request.resource.data.uid == uid
+      );
+
+    allow delete: if false;
+  }
+}
 
     // --------------------
     // SPONSORS / CAMPAIGNS / PLACEMENTS
