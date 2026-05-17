@@ -170,7 +170,7 @@ final class PushNotificationManager: NSObject {
         lastSyncedFCMToken = cleaned
         pendingFCMToken = nil
 
-        Firestore.firestore()
+        FirestoreService.db
             .collection("users")
             .document(uid)
             .setData(

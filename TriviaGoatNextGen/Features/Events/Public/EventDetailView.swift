@@ -17,8 +17,6 @@ struct EventDetailView: View {
 
     let event: AppState.TGEvent
 
-    @State private var isSavingCalendar = false
-
     private var currentEvent: AppState.TGEvent {
         app.events.first(where: { $0.id == event.id }) ?? event
     }
@@ -49,6 +47,9 @@ struct EventDetailView: View {
             }
             .ignoresSafeArea(edges: .top)
             .navigationBarHidden(true)
+            .onAppear {
+                app.listenToRSVPState(for: event.id)
+            }
         }
     }
 
@@ -247,73 +248,15 @@ struct EventDetailView: View {
     }
 
     private var actionDock: some View {
-        VStack(spacing: 10) {
-            Button {
-                HapticManager.instance.impact(.medium)
-                SpatialAudioManager.shared.play(.uiTap)
-
-                if isOrganizer {
-                    app.showEventToast("YOU HOST THIS EVENT")
-                } else {
-                    app.RSVPToEvent(currentEvent)
-                }
-            } label: {
-                Text(primaryActionTitle)
-                    .font(.system(size: 13, weight: .black, design: .monospaced))
-                    .foregroundColor(.black)
-                    .tracking(1.1)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 50)
-                    .background(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(isOrganizer ? Color.white.opacity(0.92) : Color.orange.opacity(0.96))
-                    )
-            }
-            .buttonStyle(.plain)
-
-            Button {
-                saveCalendarAndReminders()
-            } label: {
-                Text(isSavingCalendar ? "ADDING TO CALENDAR" : "ADD TO CALENDAR")
-                    .font(.system(size: 11, weight: .black, design: .monospaced))
-                    .foregroundColor(currentEvent.startsAt == nil ? .white.opacity(0.38) : .orange.opacity(0.92))
-                    .tracking(1)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 44)
-                    .background(
-                        RoundedRectangle(cornerRadius: 15, style: .continuous)
-                            .fill(Color.orange.opacity(currentEvent.startsAt == nil ? 0.04 : 0.10))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 15, style: .continuous)
-                            .stroke(Color.orange.opacity(currentEvent.startsAt == nil ? 0.08 : 0.22), lineWidth: 1)
-                    )
-            }
-            .buttonStyle(.plain)
-            .disabled(currentEvent.startsAt == nil || isSavingCalendar)
-
-            Button {
+        EventActionDock(
+            event: currentEvent,
+            onShare: {
                 HapticManager.instance.impact(.light)
                 SpatialAudioManager.shared.play(.uiTap)
+
                 app.showEventToast("SHARE COMING NEXT")
-            } label: {
-                Text("SHARE EVENT")
-                    .font(.system(size: 11, weight: .black, design: .monospaced))
-                    .foregroundColor(.white.opacity(0.82))
-                    .tracking(1)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 44)
-                    .background(
-                        RoundedRectangle(cornerRadius: 15, style: .continuous)
-                            .fill(Color.white.opacity(0.08))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 15, style: .continuous)
-                            .stroke(Color.white.opacity(0.10), lineWidth: 1)
-                    )
             }
-            .buttonStyle(.plain)
-        }
+        )
     }
 
     @ViewBuilder
@@ -338,36 +281,6 @@ struct EventDetailView: View {
 
             Spacer()
         }
-    }
-
-    private func saveCalendarAndReminders() {
-        guard currentEvent.startsAt != nil else {
-            app.showEventToast("DATE COMING")
-            return
-        }
-
-        Task {
-            isSavingCalendar = true
-
-            defer {
-                isSavingCalendar = false
-            }
-
-            do {
-                try await EventReminderManager.shared.saveEventToCalendar(currentEvent)
-                try await EventReminderManager.shared.scheduleLocalReminders(for: currentEvent)
-                app.showEventToast("REMINDERS SET")
-            } catch {
-                app.showEventToast("CALENDAR FAILED")
-                print("⚠️ Event calendar save failed: \(error.localizedDescription)")
-            }
-        }
-    }
-
-    private var primaryActionTitle: String {
-        if isOrganizer { return "HOSTING" }
-        if app.hasRSVPedToEvent(currentEvent.id) { return "RSVP SENT" }
-        return "RSVP"
     }
 
     private var isOrganizer: Bool {
@@ -428,12 +341,14 @@ struct EventDetailView: View {
 
     private var statusTitle: String {
         if isOrganizer { return "HOSTING" }
+        if app.hasRSVPedToEvent(currentEvent.id) { return "REGISTERED" }
         if currentEvent.published { return "OPEN RSVP" }
         return currentEvent.approvalStatus.uppercased()
     }
 
     private var statusSubtitle: String {
         if isOrganizer { return "Organizer access enabled" }
+        if app.hasRSVPedToEvent(currentEvent.id) { return "You're registered for this event" }
         if currentEvent.startsAt == nil { return "Schedule will be announced soon" }
         if currentEvent.published { return "Limited access available" }
         return "Event access is not currently public"
@@ -441,6 +356,7 @@ struct EventDetailView: View {
 
     private var statusIcon: String {
         if isOrganizer { return "crown.fill" }
+        if app.hasRSVPedToEvent(currentEvent.id) { return "checkmark.seal.fill" }
         if currentEvent.startsAt == nil { return "calendar.badge.clock" }
         if currentEvent.published { return "bolt.fill" }
         return "lock.fill"
@@ -448,6 +364,7 @@ struct EventDetailView: View {
 
     private var statusColor: Color {
         if isOrganizer { return .white }
+        if app.hasRSVPedToEvent(currentEvent.id) { return .green }
         if currentEvent.startsAt == nil { return .orange }
         if currentEvent.published { return .orange }
         return .red

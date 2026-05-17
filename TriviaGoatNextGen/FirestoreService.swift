@@ -274,7 +274,7 @@ final class FirestoreService {
     static let shared = FirestoreService()
 
     static var db: Firestore {
-        Firestore.firestore()
+        Firestore.firestore(database: "b4-v2-default-clone")
     }
     
     private enum DebugLog {
@@ -282,8 +282,7 @@ final class FirestoreService {
         static let telemetryErrors = true
     }
     
-    private let db = Firestore.firestore()
-    
+    private let db = Firestore.firestore(database: "b4-v2-default-clone")
     
     private enum Collections {
         static let users = "users"

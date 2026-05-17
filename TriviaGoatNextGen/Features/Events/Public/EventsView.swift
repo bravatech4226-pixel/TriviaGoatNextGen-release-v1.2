@@ -50,6 +50,19 @@ struct EventsView: View {
             .navigationBarHidden(true)
             .onAppear {
                 app.markEventsRead()
+
+                if let featured = app.featuredEvent {
+                    app.listenToRSVPState(for: featured.id)
+                }
+
+                for event in app.events {
+                    app.listenToRSVPState(for: event.id)
+                }
+            }
+            .onChange(of: app.events) { _, events in
+                for event in events {
+                    app.listenToRSVPState(for: event.id)
+                }
             }
         }
     }
@@ -193,6 +206,9 @@ struct EventsView: View {
             .overlay(RoundedRectangle(cornerRadius: 30, style: .continuous).stroke(Color.orange.opacity(0.22), lineWidth: 1.2))
         }
         .buttonStyle(.plain)
+        .onAppear {
+            app.listenToRSVPState(for: event.id)
+        }
     }
 
     private var eventListSection: some View {
@@ -240,6 +256,9 @@ struct EventsView: View {
             .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(Color.orange.opacity(0.18), lineWidth: 1))
         }
         .buttonStyle(.plain)
+        .onAppear {
+            app.listenToRSVPState(for: event.id)
+        }
     }
 
     @ViewBuilder
@@ -276,7 +295,7 @@ struct EventsView: View {
             SpatialAudioManager.shared.play(.uiTap)
 
             if app.hasRSVPedToEvent(event.id) {
-                app.showEventToast("ALREADY RSVP'D")
+                app.showEventToast("ALREADY REGISTERED")
                 return
             }
 
@@ -296,6 +315,7 @@ struct EventsView: View {
     private func openDetail(_ event: AppState.TGEvent) {
         HapticManager.instance.impact(.light)
         SpatialAudioManager.shared.play(.uiTap)
+        app.listenToRSVPState(for: event.id)
         app.selectedEvent = event
         app.setRoute(.eventDetail)
     }

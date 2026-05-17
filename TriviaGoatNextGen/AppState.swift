@@ -130,6 +130,7 @@ final class AppState: ObservableObject {
     private var communityCommentListeners: [String: ListenerRegistration] = [:]
     private var pendingCommunityCommentStatusListeners: [String: ListenerRegistration] = [:]
     private var globalBattleAdminListener: ListenerRegistration?
+    private var eventRSVPListeners: [String: ListenerRegistration] = [:]
     
     
     
@@ -1643,7 +1644,7 @@ final class AppState: ObservableObject {
     private func startCommunityPulseListenerIfNeeded() {
         guard communityPulseListener == nil else { return }
         
-        communityPulseListener = Firestore.firestore()
+        communityPulseListener = FirestoreService.db
             .collection("posts")
             .whereField("status", isEqualTo: "approved")
             .order(by: "createdAt", descending: true)
@@ -1858,7 +1859,7 @@ final class AppState: ObservableObject {
         pendingCommunityCommentStatusListeners[postID]?.remove()
         pendingCommunityCommentStatusListeners[postID] = nil
         
-        let listener = Firestore.firestore()
+        let listener = FirestoreService.db
             .collection("posts")
             .document(postID)
             .collection("comments")
@@ -1953,7 +1954,7 @@ final class AppState: ObservableObject {
         
         isRefreshingCommunityCommentsByPostID[cleanedPostID] = true
         
-        let listener = Firestore.firestore()
+        let listener = FirestoreService.db
             .collection("posts")
             .document(cleanedPostID)
             .collection("comments")
@@ -2095,7 +2096,7 @@ final class AppState: ObservableObject {
                     payload["parentCommentID"] = cleanedParentID
                 }
                 
-                let ref = try await Firestore.firestore()
+                let ref = try await FirestoreService.db
                     .collection("posts")
                     .document(cleanedPostID)
                     .collection("comments")
@@ -2740,6 +2741,41 @@ final class AppState: ObservableObject {
     // MARK: - Persistence
     
     
+    
+    func listenToRSVPState(for eventID: String) {
+
+        guard let uid = user?.uid else { return }
+
+        if eventRSVPListeners[eventID] != nil {
+            return
+        }
+
+        let listener = FirestoreService.db
+            .collection("events")
+            .document(eventID)
+            .collection("rsvps")
+            .document(uid)
+            .addSnapshotListener { [weak self] snapshot, error in
+
+                guard let self else { return }
+
+                if let error {
+                    print("⚠️ RSVP listener failed: \(error)")
+                    return
+                }
+
+                Task { @MainActor in
+
+                    if snapshot?.exists == true {
+                        self.RSVPedEventIDs.insert(eventID)
+                    } else {
+                        self.RSVPedEventIDs.remove(eventID)
+                    }
+                }
+            }
+
+        eventRSVPListeners[eventID] = listener
+    }
     
     private func persistProfileNow(uid: String? = nil) async throws {
 

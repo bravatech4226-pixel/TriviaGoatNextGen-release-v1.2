@@ -223,7 +223,7 @@ final class StreakManager: ObservableObject {
 
     private func mirrorToFirestore(uid: String, today: String) async {
         do {
-            try await Firestore.firestore()
+            try await FirestoreService.db
                 .collection("users")
                 .document(uid)
                 .setData(
