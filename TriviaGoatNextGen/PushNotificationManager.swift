@@ -86,6 +86,25 @@ final class PushNotificationManager: NSObject {
         syncFCMTokenIfNeeded(cleaned)
         #endif
     }
+    
+    func syncTokenForCurrentUserIfPossible() {
+        #if targetEnvironment(simulator)
+        return
+        #else
+        if let pendingFCMToken {
+            syncFCMTokenIfNeeded(pendingFCMToken)
+            return
+        }
+
+        Messaging.messaging().token { [weak self] token, error in
+            if let error, DebugLog.tokenEvents {
+                print("⚠️ [Push] Failed to fetch FCM token: \(error.localizedDescription)")
+            }
+
+            self?.didReceiveFCMToken(token)
+        }
+        #endif
+    }
     // MARK: - Private
 
     private func requestPermissionIfNeeded() {
@@ -125,11 +144,15 @@ final class PushNotificationManager: NSObject {
 
 
     private func flushPendingFCMTokenIfPossible() {
-        guard hasAPNSToken, let pendingFCMToken else { return }
-        self.pendingFCMToken = nil
-        syncFCMTokenIfNeeded(pendingFCMToken)
-    }
+        guard hasAPNSToken else { return }
 
+        if let pendingFCMToken {
+            syncFCMTokenIfNeeded(pendingFCMToken)
+            return
+        }
+
+        syncTokenForCurrentUserIfPossible()
+    }
     private func syncFCMTokenIfNeeded(_ token: String) {
         let cleaned = token.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleaned.isEmpty else { return }

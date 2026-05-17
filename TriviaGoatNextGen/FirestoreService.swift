@@ -272,6 +272,10 @@ struct SponsorPlacementPayload: Equatable {
 final class FirestoreService {
     
     static let shared = FirestoreService()
+
+    static var db: Firestore {
+        Firestore.firestore()
+    }
     
     private enum DebugLog {
         static let sponsorVerbose = false
@@ -279,6 +283,7 @@ final class FirestoreService {
     }
     
     private let db = Firestore.firestore()
+    
     
     private enum Collections {
         static let users = "users"

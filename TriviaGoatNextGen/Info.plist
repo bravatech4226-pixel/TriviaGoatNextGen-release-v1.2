@@ -2,14 +2,26 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>NSBonjourServices</key>
-	<array>
-		<string>_forge-arena._tcp</string>
-		<string>_forge-arena._udp</string>
-	</array>
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>remote-notification</string>
-	</array>
+
+    <key>NSBonjourServices</key>
+    <array>
+        <string>_forge-arena._tcp</string>
+        <string>_forge-arena._udp</string>
+    </array>
+
+    <key>UIBackgroundModes</key>
+    <array>
+        <string>remote-notification</string>
+    </array>
+
+    <key>NSCalendarsUsageDescription</key>
+    <string>Trivia GOAT uses your calendar to save events and reminders.</string>
+
+    <key>NSCalendarsFullAccessUsageDescription</key>
+    <string>Trivia GOAT uses your calendar to save events and reminders.</string>
+
+    <key>NSUserNotificationsUsageDescription</key>
+    <string>Trivia GOAT sends reminders for upcoming events and matches.</string>
+
 </dict>
 </plist>

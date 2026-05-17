@@ -1,4 +1,16 @@
-TriviaGoatFirebase/*client_secret*.json
+.DS_Store
+xcuserdata/
+DerivedData/
+build/
+*.xcuserstate
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+
+# Secrets
 *client_secret*.json
 TriviaGoatFirebase/*client_secret*.json
-*client_secret*.json
+*.p8
+*.pem
+.env
+.env.*
+GoogleService-Info-*.plist

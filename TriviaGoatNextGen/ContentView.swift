@@ -3,9 +3,6 @@
 //  TriviaGoatNextGen
 //
 //  CLEAN SSoT ROUTER
-//  - Global Battle is the primary multiplayer surface
-//  - Nearby multiplayer removed from active routing
-//  - Radar is no longer exposed as an active product route
 //
 
 import SwiftUI
@@ -29,8 +26,6 @@ struct ContentView: View {
         }
         .animation(.easeInOut(duration: 0.28), value: app.route)
     }
-
-    // MARK: - Busy Overlay
 
     private var shouldShowGlobalBusyOverlay: Bool {
         switch app.route {
@@ -58,17 +53,8 @@ struct ContentView: View {
         .accessibilityHidden(true)
     }
 
-    // MARK: - Router
-
     @ViewBuilder
     private func routedContent() -> some View {
-        standardRouteContent()
-    }
-
-    // MARK: - Standard Routes
-
-    @ViewBuilder
-    private func standardRouteContent() -> some View {
         switch app.route {
 
         case .landing:
@@ -107,6 +93,36 @@ struct ContentView: View {
 
         case .community:
             CommunityView()
+
+        case .events:
+            EventsView()
+                .environmentObject(app)
+
+        case .eventDetail:
+            if let event = app.selectedEvent {
+                EventDetailView(event: event)
+                    .environmentObject(app)
+            } else {
+                EventsView()
+                    .environmentObject(app)
+            }
+
+        case .creatorConsole:
+            CreatorConsoleView()
+                .environmentObject(app)
+
+        case .manageEvent:
+            if let event = app.selectedEvent {
+                EventManagementView(event: event)
+                    .environmentObject(app)
+            } else {
+                CreatorConsoleView()
+                    .environmentObject(app)
+            }
+
+        case .eventEditor:
+            EventEditorView()
+                .environmentObject(app)
 
         case .globalBattle:
             GlobalMatchView()
@@ -172,8 +188,6 @@ struct ContentView: View {
             )
         }
     }
-
-    // MARK: - Helpers
 
     private func resolvedOpponentName(_ name: String?) -> String {
         let cleaned = (name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)

@@ -200,6 +200,14 @@ struct ArenaView: View {
                                     SpatialAudioManager.shared.play(.uiTap)
                                     appRef.startDailyMissionRun()
                                 },
+                                onEvents: {
+                                    SpatialAudioManager.shared.play(.uiTap)
+                                    HapticManager.instance.impact(.light)
+
+                                    withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                                        appRef.setRoute(.events)
+                                    }
+                                },
                                 onResults: {
                                     SpatialAudioManager.shared.play(.uiTap)
 
@@ -1025,6 +1033,7 @@ private struct BattleEntryCardV2: View {
 
 private struct CommandCardV2: View {
     let onMissions: () -> Void
+    let onEvents: () -> Void
     let onResults: () -> Void
 
     var body: some View {
@@ -1037,6 +1046,14 @@ private struct CommandCardV2: View {
                 title: "arena.command.missions".localized,
                 subtitle: "arena.command.missions_subtitle".localized,
                 action: onMissions
+            )
+
+            HubRowV2(
+                icon: "calendar",
+                iconTint: .orange,
+                title: "EVENTS",
+                subtitle: "Launches, tournaments, and live drops",
+                action: onEvents
             )
 
             HubRowV2(
