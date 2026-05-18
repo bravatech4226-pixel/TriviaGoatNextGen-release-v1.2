@@ -13,6 +13,11 @@
     <array>
         <string>remote-notification</string>
     </array>
+    
+    <key>NSCalendarsUsageDescription</key>
+    <string>Trivia GOAT uses calendar access to add events to your calendar.</string>
+    <key>NSCalendarsFullAccessUsageDescription</key>
+    <string>Trivia GOAT uses calendar access to add and update events in your calendar.</string>
 
     <key>NSCalendarsUsageDescription</key>
     <string>Trivia GOAT uses your calendar to save events and reminders.</string>

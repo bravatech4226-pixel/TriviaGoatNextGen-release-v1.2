@@ -447,19 +447,19 @@ struct EventActionDock: View {
 
     private var calendarTitle: String {
 
-        if isProcessingCalendar { return "SAVING" }
+        if isProcessingCalendar { return "ADDING..." }
 
-        if hasCalendarSaved { return "REMINDERS SET" }
+        if hasCalendarSaved { return "IN CALENDAR" }
 
         if !hasDate { return "DATE COMING" }
 
-        return "CALENDAR"
+        return "ADD TO CAL"
 
     }
 
     private var calendarIcon: String {
 
-        if hasCalendarSaved { return "checkmark.circle.fill" }
+        if hasCalendarSaved { return "calendar.badge.checkmark" }
 
         if !hasDate { return "calendar.badge.clock" }
 

@@ -3,7 +3,7 @@
 //  TriviaGoatNextGen
 //
 //  PURPOSE:
-//  Event calendar + local reminder helper.
+//  EventKit calendar save/update + local notification reminder helper.
 //
 
 import Foundation
@@ -23,38 +23,21 @@ final class EventReminderManager {
             throw EventReminderError.missingStartDate
         }
 
-        let granted = try await requestCalendarPermissionIfNeeded()
+        let granted = try await requestCalendarAccessIfNeeded()
         guard granted else {
             throw EventReminderError.calendarPermissionDenied
         }
 
+        let endsAt = event.endsAt ?? startsAt.addingTimeInterval(2 * 60 * 60)
+        let marker = "TriviaGOATEventID:\(event.id)"
+
         let calendarEvent = EKEvent(eventStore: eventStore)
         calendarEvent.title = event.title
         calendarEvent.startDate = startsAt
-        calendarEvent.endDate = event.endsAt ?? startsAt.addingTimeInterval(60 * 60)
-
-        let notes: String = {
-            var lines: [String] = []
-
-            if !event.heroLine.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                lines.append(event.heroLine)
-            }
-
-            if !event.summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                lines.append(event.summary)
-            }
-
-            lines.append("Added from Trivia GOAT.")
-
-            return lines.joined(separator: "\n\n")
-        }()
-
-        calendarEvent.notes = notes
-        calendarEvent.location = event.locationType.uppercased()
+        calendarEvent.endDate = max(endsAt, startsAt.addingTimeInterval(30 * 60))
+        calendarEvent.notes = "\(event.summary)\n\n\(marker)"
         calendarEvent.calendar = eventStore.defaultCalendarForNewEvents
-
-        let alarm = EKAlarm(relativeOffset: -30 * 60)
-        calendarEvent.addAlarm(alarm)
+        calendarEvent.addAlarm(EKAlarm(relativeOffset: -30 * 60))
 
         try eventStore.save(calendarEvent, span: .thisEvent, commit: true)
     }
@@ -65,6 +48,7 @@ final class EventReminderManager {
         }
 
         let granted = try await requestNotificationPermissionIfNeeded()
+
         guard granted else {
             throw EventReminderError.notificationPermissionDenied
         }
@@ -77,7 +61,7 @@ final class EventReminderManager {
 
         let content = UNMutableNotificationContent()
         content.title = event.title
-        content.body = event.heroLine.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        content.body = event.heroLine.isEmpty
             ? "Your Trivia GOAT event starts soon."
             : event.heroLine
         content.sound = .default
@@ -98,9 +82,6 @@ final class EventReminderManager {
             trigger: trigger
         )
 
-        UNUserNotificationCenter.current()
-            .removePendingNotificationRequests(withIdentifiers: [reminderIdentifier(for: event)])
-
         try await UNUserNotificationCenter.current().add(request)
     }
 
@@ -111,32 +92,24 @@ final class EventReminderManager {
             )
     }
 
-    private func requestCalendarPermissionIfNeeded() async throws -> Bool {
+    private func requestCalendarAccessIfNeeded() async throws -> Bool {
         let status = EKEventStore.authorizationStatus(for: .event)
 
         switch status {
-        case .fullAccess, .authorized:
+        case .fullAccess:
+            return true
+
+        case .authorized:
             return true
 
         case .notDetermined:
             if #available(iOS 17.0, *) {
                 return try await eventStore.requestFullAccessToEvents()
             } else {
-                return try await withCheckedThrowingContinuation { continuation in
-                    eventStore.requestAccess(to: .event) { granted, error in
-                        if let error {
-                            continuation.resume(throwing: error)
-                        } else {
-                            continuation.resume(returning: granted)
-                        }
-                    }
-                }
+                return try await eventStore.requestAccess(to: .event)
             }
 
-        case .writeOnly:
-            return true
-
-        case .denied, .restricted:
+        case .denied, .restricted, .writeOnly:
             return false
 
         @unknown default:
@@ -163,6 +136,50 @@ final class EventReminderManager {
         @unknown default:
             return false
         }
+    }
+
+    private func findExistingCalendarEvent(
+        event: AppState.TGEvent,
+        startsAt: Date,
+        endsAt: Date,
+        marker: String
+    ) -> EKEvent? {
+        let searchStart = startsAt.addingTimeInterval(-24 * 60 * 60)
+        let searchEnd = endsAt.addingTimeInterval(24 * 60 * 60)
+
+        let predicate = eventStore.predicateForEvents(
+            withStart: searchStart,
+            end: searchEnd,
+            calendars: nil
+        )
+
+        return eventStore.events(matching: predicate).first { ekEvent in
+            ekEvent.notes?.contains(marker) == true
+        }
+    }
+
+    private func calendarNotes(
+        for event: AppState.TGEvent,
+        marker: String
+    ) -> String {
+        var lines: [String] = []
+
+        if !event.heroLine.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            lines.append(event.heroLine)
+        }
+
+        if !event.summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            lines.append(event.summary)
+        }
+
+        lines.append("")
+        lines.append(marker)
+
+        return lines.joined(separator: "\n")
+    }
+
+    private func calendarMarker(for event: AppState.TGEvent) -> String {
+        "TriviaGOATEventID:\(event.id)"
     }
 
     private func reminderIdentifier(for event: AppState.TGEvent) -> String {
