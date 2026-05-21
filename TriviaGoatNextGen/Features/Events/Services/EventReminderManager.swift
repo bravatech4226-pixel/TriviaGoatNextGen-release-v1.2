@@ -18,7 +18,8 @@ final class EventReminderManager {
 
     private init() {}
 
-    func saveEventToCalendar(_ event: AppState.TGEvent) async throws {
+    @discardableResult
+    func saveEventToCalendar(_ event: AppState.TGEvent) async throws -> String {
         guard let startsAt = event.startsAt else {
             throw EventReminderError.missingStartDate
         }
@@ -28,18 +29,48 @@ final class EventReminderManager {
             throw EventReminderError.calendarPermissionDenied
         }
 
-        let endsAt = event.endsAt ?? startsAt.addingTimeInterval(2 * 60 * 60)
-        let marker = "TriviaGOATEventID:\(event.id)"
+        let safeEnd = event.endsAt ?? startsAt.addingTimeInterval(2 * 60 * 60)
+        let endsAt = max(safeEnd, startsAt.addingTimeInterval(30 * 60))
+        let marker = calendarMarker(for: event)
 
-        let calendarEvent = EKEvent(eventStore: eventStore)
+        let calendarEvent = findExistingCalendarEvent(
+            event: event,
+            startsAt: startsAt,
+            endsAt: endsAt,
+            marker: marker
+        ) ?? EKEvent(eventStore: eventStore)
+
         calendarEvent.title = event.title
         calendarEvent.startDate = startsAt
-        calendarEvent.endDate = max(endsAt, startsAt.addingTimeInterval(30 * 60))
-        calendarEvent.notes = "\(event.summary)\n\n\(marker)"
-        calendarEvent.calendar = eventStore.defaultCalendarForNewEvents
+        calendarEvent.endDate = endsAt
+        calendarEvent.notes = calendarNotes(for: event, marker: marker)
+
+        if calendarEvent.calendar == nil {
+            calendarEvent.calendar = eventStore.defaultCalendarForNewEvents
+        }
+
+        calendarEvent.alarms = nil
         calendarEvent.addAlarm(EKAlarm(relativeOffset: -30 * 60))
 
+        print("📅 EVENT SAVE BEGIN")
+        print("📅 TITLE:", calendarEvent.title ?? "nil")
+        print("📅 START:", calendarEvent.startDate ?? Date())
+        print("📅 END:", calendarEvent.endDate ?? Date())
+        print("📅 NOTES:", calendarEvent.notes ?? "nil")
+        print("📅 CALENDAR:", calendarEvent.calendar.title)
+        print("📅 DEFAULT CAL:", eventStore.defaultCalendarForNewEvents?.title ?? "nil")
+        
         try eventStore.save(calendarEvent, span: .thisEvent, commit: true)
+        try eventStore.save(calendarEvent, span: .thisEvent, commit: true)
+
+        print("✅ EVENT SAVED")
+        print("✅ EVENT ID:", calendarEvent.eventIdentifier ?? "nil")
+
+        guard let eventIdentifier = calendarEvent.eventIdentifier else {
+            throw EventReminderError.calendarSaveFailed
+        }
+
+        return eventIdentifier
     }
 
     func scheduleLocalReminders(for event: AppState.TGEvent) async throws {
@@ -48,7 +79,6 @@ final class EventReminderManager {
         }
 
         let granted = try await requestNotificationPermissionIfNeeded()
-
         guard granted else {
             throw EventReminderError.notificationPermissionDenied
         }
@@ -61,7 +91,7 @@ final class EventReminderManager {
 
         let content = UNMutableNotificationContent()
         content.title = event.title
-        content.body = event.heroLine.isEmpty
+        content.body = event.heroLine.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? "Your Trivia GOAT event starts soon."
             : event.heroLine
         content.sound = .default
@@ -82,6 +112,11 @@ final class EventReminderManager {
             trigger: trigger
         )
 
+        UNUserNotificationCenter.current()
+            .removePendingNotificationRequests(
+                withIdentifiers: [reminderIdentifier(for: event)]
+            )
+
         try await UNUserNotificationCenter.current().add(request)
     }
 
@@ -96,10 +131,7 @@ final class EventReminderManager {
         let status = EKEventStore.authorizationStatus(for: .event)
 
         switch status {
-        case .fullAccess:
-            return true
-
-        case .authorized:
+        case .fullAccess, .authorized:
             return true
 
         case .notDetermined:
@@ -164,12 +196,15 @@ final class EventReminderManager {
     ) -> String {
         var lines: [String] = []
 
-        if !event.heroLine.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            lines.append(event.heroLine)
+        let heroLine = event.heroLine.trimmingCharacters(in: .whitespacesAndNewlines)
+        let summary = event.summary.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if !heroLine.isEmpty {
+            lines.append(heroLine)
         }
 
-        if !event.summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            lines.append(event.summary)
+        if !summary.isEmpty {
+            lines.append(summary)
         }
 
         lines.append("")
@@ -192,4 +227,5 @@ enum EventReminderError: Error {
     case calendarPermissionDenied
     case notificationPermissionDenied
     case reminderDateInPast
+    case calendarSaveFailed
 }

@@ -205,7 +205,7 @@ struct ArenaView: View {
                                     HapticManager.instance.impact(.light)
 
                                     withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
-                                        appRef.setRoute(.events)
+                                        appRef.openEventsFromArena()
                                     }
                                 },
                                 onResults: {

@@ -6,16 +6,22 @@
 //
 //  PURPOSE:
 //  Public event detail surface.
+//  - Event detail presentation
+//  - RSVP action dock
+//  - Deep-link share payload
 //
 
 import SwiftUI
 import Combine
+import UIKit
 
 struct EventDetailView: View {
 
     @EnvironmentObject private var app: AppState
 
     let event: AppState.TGEvent
+
+    @State private var showShareSheet = false
 
     private var currentEvent: AppState.TGEvent {
         app.events.first(where: { $0.id == event.id }) ?? event
@@ -49,6 +55,9 @@ struct EventDetailView: View {
             .navigationBarHidden(true)
             .onAppear {
                 app.listenToRSVPState(for: event.id)
+            }
+            .sheet(isPresented: $showShareSheet) {
+                EventShareSheet(items: eventShareItems)
             }
         }
     }
@@ -253,8 +262,7 @@ struct EventDetailView: View {
             onShare: {
                 HapticManager.instance.impact(.light)
                 SpatialAudioManager.shared.play(.uiTap)
-
-                app.showEventToast("SHARE COMING NEXT")
+                showShareSheet = true
             }
         )
     }
@@ -281,6 +289,29 @@ struct EventDetailView: View {
 
             Spacer()
         }
+    }
+
+    private var eventShareURL: URL {
+        URL(string: "https://triviagoat.ca/events/\(currentEvent.id)")!
+    }
+
+    private var eventShareText: String {
+        var lines: [String] = []
+
+        lines.append(currentEvent.title)
+
+        if !currentEvent.heroLine.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            lines.append(currentEvent.heroLine)
+        }
+
+        lines.append(formattedDate)
+        lines.append(eventShareURL.absoluteString)
+
+        return lines.joined(separator: "\n")
+    }
+
+    private var eventShareItems: [Any] {
+        [eventShareText, eventShareURL]
     }
 
     private var isOrganizer: Bool {
@@ -317,6 +348,7 @@ struct EventDetailView: View {
 
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = .current
         formatter.dateFormat = "EEE, MMM d • h:mm a"
 
         return formatter.string(from: startsAt).uppercased()
@@ -391,3 +423,5 @@ struct EventDetailView: View {
         }
     }
 }
+
+

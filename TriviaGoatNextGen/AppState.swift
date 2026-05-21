@@ -215,6 +215,15 @@ final class AppState: ObservableObject {
                 self.isRefreshingEvents = false
             }
     }
+    
+    func openEventsFromArena() {
+        isRefreshingEvents = true
+        eventsErrorMessage = nil
+
+        startEventsListenerIfNeeded()
+
+        setRoute(.events)
+    }
 
     private func makeTGEvent(from doc: QueryDocumentSnapshot) -> TGEvent? {
         let data = doc.data()

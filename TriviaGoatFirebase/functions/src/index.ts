@@ -15,7 +15,7 @@ import * as logger from "firebase-functions/logger";
 import { setGlobalOptions } from "firebase-functions/v2";
 import { defineSecret } from "firebase-functions/params";
 
-import { initializeApp } from "firebase-admin/app";
+import { getApp, initializeApp } from "firebase-admin/app";
 import {
   getFirestore,
   FieldValue,
@@ -36,7 +36,7 @@ import {
 
 initializeApp();
 
-const db = getFirestore();
+const db = getFirestore(getApp(), "b4-v2-default-clone");
 const messaging = getMessaging();
 
 setGlobalOptions({ region: "us-central1" });
@@ -2257,196 +2257,292 @@ export const submitAnswer = onCall(
     return { success: true };
   }
 );
-
-/**
- * Returns the shared Daily Mission pack for the requested day key.
- * @param {CallableRequest} request - Callable request.
- * @return {Promise<object>} Mission pack payload.
- */
-export const generateDailyMissionPack = onCall(
-  { secrets: [GEMINI_API_KEY], timeoutSeconds: 60, memory: "256MiB" },
-  async (request: CallableRequest): Promise<object> => {
-    const uid = request.auth?.uid;
-    if (!uid) {
-      throw new HttpsError("unauthenticated", "Auth required.");
-    }
-
-    await enforceRateLimit(
-      `generateDailyMissionPack:${uid}`,
-      20,
-      60 * 1000,
-      "Too many daily mission requests. Please wait a moment and try again."
-    );
-
-    const data = (request.data ?? {}) as Record<string, unknown>;
-    const dayKey = normalizeDayKey(asTrimmedString(data.dayKey));
-    const count = 15;
-    const minimumAcceptableCount = 10;
-    const modelName = getFastModel();
-    const docRef = db.collection("dailyMissionPacks").doc(dayKey);
-
-    const existingSnap = await docRef.get();
-    if (existingSnap.exists) {
-      const existing = existingSnap.data() as DailyMissionPackDoc;
-      if (
-        existing.status === "ready" &&
-        Array.isArray(existing.questions) &&
-        existing.questions.length >= minimumAcceptableCount
-      ) {
-        return {
-          questions: existing.questions,
-          topic: existing.topic || existing.lockedTopic || pickDailyMissionTopic(dayKey),
-          dayKey: existing.dayKey || dayKey,
-          generatedAt: existing.generatedAt || new Date().toISOString(),
-          cached: true,
-          model: existing.model || modelName,
+        /**
+         * Shared Daily Mission pack generation result payload.
+         */
+        type DailyMissionPackResult = {
+          questions: unknown[];
+          topic: string;
+          dayKey: string;
+          generatedAt: string;
+          cached: boolean;
+          model: string;
         };
-      }
-    }
 
-    const lockedTopic = pickDailyMissionTopic(dayKey);
+        /**
+         * Ensures the shared Daily Mission pack exists and is ready.
+         * Reuses an existing ready pack, waits briefly for active generation,
+         * or generates a new pack when needed.
+         * @param {string} dayKey - Normalized mission day key.
+         * @return {Promise<DailyMissionPackResult>} Ready mission pack payload.
+         */
+        async function ensureDailyMissionPackReady(
+          dayKey: string
+        ): Promise<DailyMissionPackResult> {
+          const count = 15;
+          const minimumAcceptableCount = 10;
+          const modelName = getFastModel();
+          const docRef = db.collection("dailyMissionPacks").doc(dayKey);
 
-    const lockResult = await db.runTransaction(async (tx: Transaction) => {
-      const snap = await tx.get(docRef);
+          const existingSnap = await docRef.get();
 
-      if (snap.exists) {
-        const existing = snap.data() as DailyMissionPackDoc;
+          if (existingSnap.exists) {
+            const existing = existingSnap.data() as DailyMissionPackDoc;
 
-        if (
-          existing.status === "ready" &&
-          Array.isArray(existing.questions) &&
-          existing.questions.length >= minimumAcceptableCount
-        ) {
-          return { mode: "ready" as const, data: existing };
+            if (
+              existing.status === "ready" &&
+              Array.isArray(existing.questions) &&
+              existing.questions.length >= minimumAcceptableCount
+            ) {
+              return {
+                questions: existing.questions,
+                topic:
+                  existing.topic ||
+                  existing.lockedTopic ||
+                  pickDailyMissionTopic(dayKey),
+                dayKey: existing.dayKey || dayKey,
+                generatedAt: existing.generatedAt || new Date().toISOString(),
+                cached: true,
+                model: existing.model || modelName,
+              };
+            }
+          }
+
+          const lockedTopic = pickDailyMissionTopic(dayKey);
+
+          const lockResult = await db.runTransaction(async (tx: Transaction) => {
+            const snap = await tx.get(docRef);
+
+            if (snap.exists) {
+              const existing = snap.data() as DailyMissionPackDoc;
+
+              if (
+                existing.status === "ready" &&
+                Array.isArray(existing.questions) &&
+                existing.questions.length >= minimumAcceptableCount
+              ) {
+                return { mode: "ready" as const, data: existing };
+              }
+
+              if (existing.status === "generating") {
+                return { mode: "wait" as const };
+              }
+            }
+
+            tx.set(
+              docRef,
+              {
+                status: "generating",
+                dayKey,
+                topic: lockedTopic,
+                lockedTopic,
+                questions: [],
+                generatedAt: "",
+                model: "",
+                createdAt: FieldValue.serverTimestamp(),
+                updatedAt: FieldValue.serverTimestamp(),
+              },
+              { merge: true }
+            );
+
+            return { mode: "generate" as const };
+          });
+
+          if (lockResult.mode === "ready") {
+            const existing = lockResult.data;
+
+            return {
+              questions: existing.questions,
+              topic: existing.topic || existing.lockedTopic || lockedTopic,
+              dayKey: existing.dayKey || dayKey,
+              generatedAt: existing.generatedAt || new Date().toISOString(),
+              cached: true,
+              model: existing.model || modelName,
+            };
+          }
+
+          if (lockResult.mode === "wait") {
+            for (let i = 0; i < 10; i++) {
+              await new Promise((resolve) => setTimeout(resolve, 350));
+
+              const waitSnap = await docRef.get();
+
+              if (!waitSnap.exists) continue;
+
+              const waiting = waitSnap.data() as DailyMissionPackDoc;
+
+              if (
+                waiting.status === "ready" &&
+                Array.isArray(waiting.questions) &&
+                waiting.questions.length >= minimumAcceptableCount
+              ) {
+                return {
+                  questions: waiting.questions,
+                  topic: waiting.topic || waiting.lockedTopic || lockedTopic,
+                  dayKey: waiting.dayKey || dayKey,
+                  generatedAt: waiting.generatedAt || new Date().toISOString(),
+                  cached: true,
+                  model: waiting.model || modelName,
+                };
+              }
+            }
+
+            throw new HttpsError(
+              "resource-exhausted",
+              "Daily mission pack is generating. Try again."
+            );
+          }
+
+          try {
+            const model = createGemini(GEMINI_API_KEY.value(), modelName);
+
+            const result = await model.generateContent({
+              contents: [
+                {
+                  role: "user",
+                  parts: [{ text: buildTriviaPrompt(lockedTopic, count) }],
+                },
+              ],
+              generationConfig: {
+                responseMimeType: "application/json",
+              },
+            });
+
+            const parsed = safeJsonParse(result.response.text());
+            const questions = dedupeQuestions(validateAndMapQuestions(parsed, count));
+
+            if (questions.length < minimumAcceptableCount) {
+              throw new HttpsError(
+                "resource-exhausted",
+                `Insufficient daily mission trivia generated for "${lockedTopic}".`
+              );
+            }
+
+            const generatedAt = new Date().toISOString();
+
+            await docRef.set(
+              {
+                status: "ready",
+                dayKey,
+                topic: lockedTopic,
+                lockedTopic,
+                questions,
+                generatedAt,
+                model: modelName,
+                updatedAt: FieldValue.serverTimestamp(),
+              },
+              { merge: true }
+            );
+
+            return {
+              questions,
+              topic: lockedTopic,
+              dayKey,
+              generatedAt,
+              cached: false,
+              model: modelName,
+            };
+          } catch (error) {
+            await docRef.set(
+              {
+                status: "failed",
+                questions: [],
+                topic: lockedTopic,
+                lockedTopic,
+                error: error instanceof Error ?
+                  error.message :
+                  "Unknown daily mission generation failure.",
+                updatedAt: FieldValue.serverTimestamp(),
+              },
+              { merge: true }
+            );
+
+            if (error instanceof HttpsError) {
+              throw error;
+            }
+
+            throw new HttpsError("internal", "Failed to generate daily mission pack.");
+          }
         }
 
-        if (existing.status === "generating") {
-          return { mode: "wait" as const };
-        }
-      }
+        /**
+         * Returns the shared Daily Mission pack for the requested day key.
+         * @param {CallableRequest} request - Callable request.
+         * @return {Promise<object>} Mission pack payload.
+         */
+        export const generateDailyMissionPack = onCall(
+          {
+            secrets: [GEMINI_API_KEY],
+            timeoutSeconds: 60,
+            memory: "256MiB",
+          },
+          async (request: CallableRequest): Promise<object> => {
+            const uid = request.auth?.uid;
 
-      tx.set(
-        docRef,
-        {
-          status: "generating",
-          dayKey,
-          topic: lockedTopic,
-          lockedTopic,
-          questions: [],
-          generatedAt: "",
-          model: "",
-          createdAt: FieldValue.serverTimestamp(),
-          updatedAt: FieldValue.serverTimestamp(),
-        },
-        { merge: true }
-      );
+            if (!uid) {
+              throw new HttpsError("unauthenticated", "Auth required.");
+            }
 
-      return { mode: "generate" as const };
-    });
+            await enforceRateLimit(
+              `generateDailyMissionPack:${uid}`,
+              20,
+              60 * 1000,
+              "Too many daily mission requests. Please wait a moment and try again."
+            );
 
-    if (lockResult.mode === "ready") {
-      const existing = lockResult.data;
-      return {
-        questions: existing.questions,
-        topic: existing.topic || existing.lockedTopic || lockedTopic,
-        dayKey: existing.dayKey || dayKey,
-        generatedAt: existing.generatedAt || new Date().toISOString(),
-        cached: true,
-        model: existing.model || modelName,
-      };
-    }
+            const data = (request.data ?? {}) as Record<string, unknown>;
+            const dayKey = normalizeDayKey(asTrimmedString(data.dayKey));
 
-    if (lockResult.mode === "wait") {
-      for (let i = 0; i < 10; i++) {
-        await new Promise((resolve) => setTimeout(resolve, 350));
-        const waitSnap = await docRef.get();
-
-        if (!waitSnap.exists) continue;
-
-        const waiting = waitSnap.data() as DailyMissionPackDoc;
-        if (
-          waiting.status === "ready" &&
-          Array.isArray(waiting.questions) &&
-          waiting.questions.length >= minimumAcceptableCount
-        ) {
-          return {
-            questions: waiting.questions,
-            topic: waiting.topic || waiting.lockedTopic || lockedTopic,
-            dayKey: waiting.dayKey || dayKey,
-            generatedAt: waiting.generatedAt || new Date().toISOString(),
-            cached: true,
-            model: waiting.model || modelName,
-          };
-        }
-      }
-
-      throw new HttpsError(
-        "resource-exhausted",
-        "Daily mission pack is generating. Try again."
-      );
-    }
-
-    try {
-      const model = createGemini(GEMINI_API_KEY.value(), modelName);
-      const result = await model.generateContent({
-        contents: [{ role: "user", parts: [{ text: buildTriviaPrompt(lockedTopic, count) }] }],
-        generationConfig: { responseMimeType: "application/json" },
-      });
-
-      const parsed = safeJsonParse(result.response.text());
-      const questions = dedupeQuestions(validateAndMapQuestions(parsed, count));
-
-      if (questions.length < minimumAcceptableCount) {
-        throw new HttpsError(
-          "resource-exhausted",
-          `Insufficient daily mission trivia generated for "${lockedTopic}".`
+            return ensureDailyMissionPackReady(dayKey);
+          }
         );
-      }
 
-      const generatedAt = new Date().toISOString();
+        /**
+         * Warms the Daily Mission pack shortly after midnight so users
+         * receive an instant cached pack instead of triggering cold generation.
+         * @return {Promise<void>} Completion promise.
+         */
+        export const scheduledDailyMissionPackWarm = onSchedule(
+          {
+            schedule: "1 0 * * *",
+            timeZone: "America/Toronto",
+            secrets: [GEMINI_API_KEY],
+            timeoutSeconds: 60,
+            memory: "256MiB",
+          },
+          async (): Promise<void> => {
+            const now = new Date();
 
-      await docRef.set(
-        {
-          status: "ready",
-          dayKey,
-          topic: lockedTopic,
-          lockedTopic,
-          questions,
-          generatedAt,
-          model: modelName,
-          updatedAt: FieldValue.serverTimestamp(),
-        },
-        { merge: true }
-      );
+            const formatter = new Intl.DateTimeFormat("en-CA", {
+              timeZone: "America/Toronto",
+              year: "numeric",
+              month: "2-digit",
+              day: "2-digit",
+            });
 
-      return {
-        questions,
-        topic: lockedTopic,
-        dayKey,
-        generatedAt,
-        cached: false,
-        model: modelName,
-      };
-    } catch (error) {
-      await docRef.set(
-        {
-          status: "ready",
-          questions: [],
-          topic: lockedTopic,
-          lockedTopic,
-          updatedAt: FieldValue.serverTimestamp(),
-        },
-        { merge: true }
-      );
+            const parts = formatter.formatToParts(now);
 
-      if (error instanceof HttpsError) {
-        throw error;
-      }
+            const year = parts.find((part) => part.type === "year")?.value;
+            const month = parts.find((part) => part.type === "month")?.value;
+            const day = parts.find((part) => part.type === "day")?.value;
 
-      throw new HttpsError("internal", "Failed to generate daily mission pack.");
-    }
-  }
-);
+            if (!year || !month || !day) {
+              throw new Error("Could not resolve scheduled daily mission day key.");
+            }
+
+            const dayKey = `${year}-${month}-${day}`;
+
+            const result = await ensureDailyMissionPackReady(dayKey);
+
+            console.log("✅ Scheduled daily mission pack warm complete", {
+              dayKey,
+              topic: result.topic,
+              cached: result.cached,
+              count: result.questions.length,
+              model: result.model,
+            });
+          }
+        );
 
             /**
              * Claims a unique codename for the authenticated user.
@@ -4959,5 +5055,3 @@ export const healthCheck = onCall(
     };
   }
 );
-
-

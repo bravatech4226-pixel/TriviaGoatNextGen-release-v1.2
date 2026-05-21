@@ -595,7 +595,7 @@ struct EventActionDock: View {
 
         guard !hasCalendarSaved else {
 
-            app.showEventToast("REMINDERS SET")
+            app.showEventToast("ALREADY IN CALENDAR")
 
             return
 
@@ -613,19 +613,22 @@ struct EventActionDock: View {
 
             do {
 
-                try await EventReminderManager.shared.saveEventToCalendar(event)
+                let calendarEventID = try await EventReminderManager.shared
+                    .saveEventToCalendar(event)
 
-                try await EventReminderManager.shared.scheduleLocalReminders(for: event)
+                print("📅 Saved Apple Calendar EKEvent ID:", calendarEventID)
+
+                try? await EventReminderManager.shared.scheduleLocalReminders(for: event)
 
                 savedCalendarIDs.insert(event.id)
 
-                app.showEventToast("REMINDERS SET")
+                app.showEventToast("ADDED TO CALENDAR")
 
             } catch {
 
-                app.showEventToast("REMINDER FAILED")
+                app.showEventToast("CALENDAR FAILED")
 
-                print("⚠️ Event reminder failed: \(error.localizedDescription)")
+                print("⚠️ Event calendar save failed: \(error.localizedDescription)")
 
             }
 
