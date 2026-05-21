@@ -131,6 +131,8 @@ final class AppState: ObservableObject {
     private var pendingCommunityCommentStatusListeners: [String: ListenerRegistration] = [:]
     private var globalBattleAdminListener: ListenerRegistration?
     private var eventRSVPListeners: [String: ListenerRegistration] = [:]
+    private var didHydrateEventsOnce: Bool = false
+    private var knownEventFingerprints: [String: String] = [:]
     
     
     
@@ -204,13 +206,7 @@ final class AppState: ObservableObject {
                         }
                     }
 
-                self.events = publicEvents
-
-                self.featuredEvent =
-                    publicEvents
-                        .sorted { $0.featuredPriority > $1.featuredPriority }
-                        .first(where: { $0.featured })
-                    ?? publicEvents.first
+                self.applyEventsSnapshot(publicEvents)
 
                 self.isRefreshingEvents = false
             }
@@ -221,8 +217,64 @@ final class AppState: ObservableObject {
         eventsErrorMessage = nil
 
         startEventsListenerIfNeeded()
+        markEventsRead()
 
         setRoute(.events)
+    }
+    
+    private func applyEventsSnapshot(_ publicEvents: [TGEvent]) {
+        let nextFingerprints = Dictionary(
+            uniqueKeysWithValues: publicEvents.map {
+                ($0.id, eventFingerprint($0))
+            }
+        )
+
+        if didHydrateEventsOnce {
+            let hasNewOrUpdatedPublicEvent = publicEvents.contains { event in
+                knownEventFingerprints[event.id] != nextFingerprints[event.id]
+            }
+
+            if hasNewOrUpdatedPublicEvent {
+                hasUnreadEvents = true
+            }
+        } else {
+            didHydrateEventsOnce = true
+        }
+
+        knownEventFingerprints = nextFingerprints
+        events = publicEvents
+
+        featuredEvent =
+            publicEvents
+                .sorted { $0.featuredPriority > $1.featuredPriority }
+                .first(where: { $0.featured })
+            ?? publicEvents.first
+
+        if let selectedEvent,
+           let updatedSelected = publicEvents.first(where: { $0.id == selectedEvent.id }) {
+            self.selectedEvent = updatedSelected
+        }
+    }
+
+    private func eventFingerprint(_ event: TGEvent) -> String {
+        [
+            event.title,
+            event.heroLine,
+            event.summary,
+            event.status,
+            event.approvalStatus,
+            event.visibility,
+            event.category,
+            event.locationType,
+            event.startsAt.map { String(Int($0.timeIntervalSince1970)) } ?? "-",
+            event.endsAt.map { String(Int($0.timeIntervalSince1970)) } ?? "-",
+            String(event.capacity),
+            String(event.attendeeCount),
+            String(event.waitlistEnabled),
+            String(event.featured),
+            String(event.featuredPriority),
+            String(event.published)
+        ].joined(separator: "|")
     }
 
     private func makeTGEvent(from doc: QueryDocumentSnapshot) -> TGEvent? {
@@ -365,12 +417,18 @@ final class AppState: ObservableObject {
 
     func markEventsRead() {
         hasUnreadEvents = false
+        knownEventFingerprints = Dictionary(
+            uniqueKeysWithValues: events.map {
+                ($0.id, eventFingerprint($0))
+            }
+        )
     }
 
     func openEvents() {
+        startEventsListenerIfNeeded()
+        markEventsRead()
         setRoute(.events)
     }
-
     func showEventToast(_ message: String) {
         eventRSVPToastMessage = message
 

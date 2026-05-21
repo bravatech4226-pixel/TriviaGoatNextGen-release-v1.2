@@ -196,6 +196,7 @@ struct ArenaView: View {
                             )
 
                             CommandCardV2(
+                                hasUnreadEvents: appRef.hasUnreadEvents,
                                 onMissions: {
                                     SpatialAudioManager.shared.play(.uiTap)
                                     appRef.startDailyMissionRun()
@@ -206,6 +207,7 @@ struct ArenaView: View {
 
                                     withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
                                         appRef.openEventsFromArena()
+                                        appRef.markEventsRead()
                                     }
                                 },
                                 onResults: {
@@ -990,10 +992,6 @@ private struct TrainingCardV2: View {
                     .foregroundColor(.white.opacity(0.6))
 
                 Spacer()
-
-                Text(gateText)
-                    .font(DS.Typography.font(16, weight: .black, design: .rounded, cappedAt: 20))
-                    .foregroundColor(.white)
             }
         }
         .tacticalPanel()
@@ -1032,6 +1030,7 @@ private struct BattleEntryCardV2: View {
 }
 
 private struct CommandCardV2: View {
+    let hasUnreadEvents: Bool
     let onMissions: () -> Void
     let onEvents: () -> Void
     let onResults: () -> Void
@@ -1052,8 +1051,22 @@ private struct CommandCardV2: View {
                 icon: "calendar",
                 iconTint: .orange,
                 title: "EVENTS",
-                subtitle: "Launches, tournaments, and live drops",
+                subtitle: hasUnreadEvents
+                    ? "New event updates available"
+                    : "Launches, tournaments, and live drops",
                 action: onEvents
+            )
+            .overlay(
+                hasUnreadEvents ?
+                    Text("NEW")
+                    .font(DS.Typography.font(9, weight: .black, design: .monospaced, cappedAt: 11))
+                    .foregroundColor(.black)
+                    .padding(.vertical, 4)
+                    .padding(.horizontal, 8)
+                    .background(Capsule().fill(Color.orange))
+                    .padding(10)
+                    : nil,
+                alignment: .topTrailing
             )
 
             HubRowV2(

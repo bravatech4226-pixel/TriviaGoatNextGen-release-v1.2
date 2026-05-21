@@ -49,6 +49,7 @@ struct EventsView: View {
             .ignoresSafeArea(edges: .top)
             .navigationBarHidden(true)
             .onAppear {
+                app.openEvents()
                 app.markEventsRead()
 
                 if let featured = app.featuredEvent {
