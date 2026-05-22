@@ -608,6 +608,7 @@ final class AppState: ObservableObject {
         let displayName = cleanedName.isEmpty ? "Pilot" : cleanedName
 
         RSVPToEventLocally(event.id)
+        locallyIncrementEventAttendance(for: event.id)
 
         let db = FirestoreService.db
         let eventRef = db.collection("events").document(event.id)
@@ -646,6 +647,7 @@ final class AppState: ObservableObject {
             Task { @MainActor in
                 if let error {
                     self.RSVPedEventIDs.remove(event.id)
+                    self.refreshEvents()
                     print("⚠️ RSVP failed: \(error)")
                     self.showEventToast("RSVP FAILED")
                     return
@@ -660,6 +662,58 @@ final class AppState: ObservableObject {
 
     private func RSVPToEventLocally(_ eventID: String) {
         RSVPedEventIDs.insert(eventID)
+    }
+    private func locallyIncrementEventAttendance(for eventID: String) {
+        events = events.map { event in
+            guard event.id == eventID else { return event }
+
+            return TGEvent(
+                id: event.id,
+                title: event.title,
+                heroLine: event.heroLine,
+                summary: event.summary,
+                coverImageURL: event.coverImageURL,
+                status: event.status,
+                approvalStatus: event.approvalStatus,
+                visibility: event.visibility,
+                category: event.category,
+                locationType: event.locationType,
+                startsAt: event.startsAt,
+                endsAt: event.endsAt,
+                capacity: event.capacity,
+                attendeeCount: event.attendeeCount + 1,
+                waitlistEnabled: event.waitlistEnabled,
+                featured: event.featured,
+                featuredPriority: event.featuredPriority,
+                published: event.published,
+                organizerUID: event.organizerUID,
+                organizerName: event.organizerName,
+                submittedByUID: event.submittedByUID,
+                approvedByUID: event.approvedByUID,
+                approvedAt: event.approvedAt,
+                rejectedReason: event.rejectedReason,
+                createdAt: event.createdAt
+            )
+        }
+
+        featuredEvent = events
+            .sorted { $0.featuredPriority > $1.featuredPriority }
+            .first(where: { $0.featured })
+            ?? events.first
+
+        if let selectedEvent,
+           let updated = events.first(where: { $0.id == selectedEvent.id }) {
+            self.selectedEvent = updated
+        }
+    }
+    
+    private func locallyMarkEventWaitlistJoined(for eventID: String) {
+        joinedEventWaitlists.insert(eventID)
+
+        if let selectedEvent,
+           selectedEvent.id == eventID {
+            self.selectedEvent = selectedEvent
+        }
     }
 
     func joinEventWaitlist(_ event: TGEvent) {
@@ -676,7 +730,7 @@ final class AppState: ObservableObject {
         let cleanedName = profile.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         let displayName = cleanedName.isEmpty ? "Pilot" : cleanedName
 
-        joinedEventWaitlists.insert(event.id)
+        locallyMarkEventWaitlistJoined(for: event.id)
 
         let db = FirestoreService.db
         let eventRef = db.collection("events").document(event.id)
@@ -714,6 +768,7 @@ final class AppState: ObservableObject {
             Task { @MainActor in
                 if let error {
                     self.joinedEventWaitlists.remove(event.id)
+                    self.refreshEvents()
                     print("⚠️ Join waitlist failed: \(error)")
                     self.showEventToast("WAITLIST FAILED")
                     return

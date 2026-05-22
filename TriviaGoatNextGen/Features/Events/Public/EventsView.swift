@@ -17,6 +17,8 @@ struct EventsView: View {
 
     @State private var now = Date()
     @State private var pulse = false
+    @State private var attendeeFlashEventIDs: Set<String> = []
+    @State private var lastAttendeeCountsByEventID: [String: Int] = [:]
 
     private let timer = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
 
@@ -64,6 +66,7 @@ struct EventsView: View {
                 app.openEvents()
                 app.markEventsRead()
                 startRSVPListeners(for: app.events)
+                captureAttendeeCounts(app.events)
 
                 withAnimation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true)) {
                     pulse = true
@@ -74,6 +77,7 @@ struct EventsView: View {
             }
             .onChange(of: app.events) { _, events in
                 startRSVPListeners(for: events)
+                detectAttendeeMomentum(events)
             }
         }
     }
@@ -257,7 +261,11 @@ struct EventsView: View {
                 }
 
                 HStack(spacing: 10) {
-                    telemetryPill(icon: "person.2.fill", title: "ATTENDING", value: attendeeDisplayText(for: event))
+                    telemetryPill(
+                        icon: isAttendeeMomentumActive(for: event) ? "person.2.badge.plus" : "person.2.fill",
+                        title: isAttendeeMomentumActive(for: event) ? "MOMENTUM" : "ATTENDING",
+                        value: attendeeDisplayText(for: event)
+                    )
                     telemetryPill(icon: "dot.radiowaves.left.and.right", title: "ACCESS", value: statusText(for: event))
                 }
             }
@@ -411,12 +419,16 @@ struct EventsView: View {
             metaChip(icon: "timer", text: timelineText(for: event))
 
             if shouldShowAttendeeCount(for: event) {
-                metaChip(icon: "person.2.fill", text: attendeeDisplayText(for: event))
+                metaChip(
+                    icon: isAttendeeMomentumActive(for: event) ? "person.2.badge.plus" : "person.2.fill",
+                    text: attendeeDisplayText(for: event),
+                    isHot: isAttendeeMomentumActive(for: event)
+                )
             }
         }
     }
 
-    private func metaChip(icon: String, text: String) -> some View {
+    private func metaChip(icon: String, text: String, isHot: Bool = false) -> some View {
         HStack(spacing: 6) {
             Image(systemName: icon)
                 .font(.system(size: 10, weight: .black))
@@ -426,11 +438,16 @@ struct EventsView: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.68)
         }
-        .foregroundColor(.white.opacity(0.72))
+        .foregroundColor(isHot ? .black : .white.opacity(0.72))
         .padding(.horizontal, 10)
         .frame(maxWidth: .infinity)
         .frame(height: 32)
-        .background(Capsule().fill(Color.white.opacity(0.07)))
+        .background(
+            Capsule()
+                .fill(isHot ? Color.orange.opacity(0.96) : Color.white.opacity(0.07))
+        )
+        .scaleEffect(isHot && pulse ? 1.025 : 1.0)
+        .animation(.easeInOut(duration: 0.22), value: isHot)
     }
 
     private func telemetryPill(icon: String, title: String, value: String) -> some View {
@@ -519,6 +536,31 @@ struct EventsView: View {
         for event in events {
             app.listenToRSVPState(for: event.id)
         }
+    }
+    private func captureAttendeeCounts(_ events: [AppState.TGEvent]) {
+        lastAttendeeCountsByEventID = Dictionary(
+            uniqueKeysWithValues: events.map { ($0.id, $0.attendeeCount) }
+        )
+    }
+
+    private func detectAttendeeMomentum(_ events: [AppState.TGEvent]) {
+        for event in events {
+            let previous = lastAttendeeCountsByEventID[event.id] ?? event.attendeeCount
+
+            if event.attendeeCount > previous {
+                attendeeFlashEventIDs.insert(event.id)
+
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+                    attendeeFlashEventIDs.remove(event.id)
+                }
+            }
+
+            lastAttendeeCountsByEventID[event.id] = event.attendeeCount
+        }
+    }
+
+    private func isAttendeeMomentumActive(for event: AppState.TGEvent) -> Bool {
+        attendeeFlashEventIDs.contains(event.id)
     }
 
     private func shouldShowAttendeeCount(for event: AppState.TGEvent) -> Bool {
