@@ -117,6 +117,7 @@ final class AppState: ObservableObject {
     @Published var eventsErrorMessage: String? = nil
     @Published private(set) var RSVPedEventIDs: Set<String> = []
     @Published var eventRSVPToastMessage: String? = nil
+    @Published var eventConfirmationMoment: TGEvent? = nil
     @Published private(set) var joinedEventWaitlists: Set<String> = []
     
     private var pendingCommunityRefreshCompletion: (() -> Void)? = nil
@@ -442,7 +443,19 @@ final class AppState: ObservableObject {
             }
         }
     }
+    func showEventConfirmationMoment(for event: TGEvent) {
+        eventConfirmationMoment = event
 
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 2_400_000_000)
+            guard let self else { return }
+
+            if self.eventConfirmationMoment?.id == event.id {
+                self.eventConfirmationMoment = nil
+            }
+        }
+    }
+    
     func hasRSVPed(to event: TGEvent) -> Bool {
         RSVPedEventIDs.contains(event.id)
     }
@@ -639,6 +652,7 @@ final class AppState: ObservableObject {
                 }
 
                 self.showEventToast("RSVP CONFIRMED")
+                self.showEventConfirmationMoment(for: event)
                 self.refreshEvents()
             }
         }
@@ -1085,6 +1099,7 @@ final class AppState: ObservableObject {
         RSVPedEventIDs = []
         joinedEventWaitlists = []
         eventRSVPToastMessage = nil
+        eventConfirmationMoment = nil
 
         eventsListener?.remove()
         eventsListener = nil

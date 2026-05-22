@@ -36,13 +36,13 @@ struct EventDetailView: View {
         GeometryReader { geo in
             ZStack {
                 SpaceBackground()
-
+                
                 EventDetailAmbientGlow(pulse: pulse, statusColor: statusColor)
                     .allowsHitTesting(false)
-
+                
                 VStack(spacing: 0) {
                     header(safeTop: geo.safeAreaInsets.top)
-
+                    
                     ScrollView(showsIndicators: false) {
                         VStack(alignment: .leading, spacing: 18) {
                             heroCard
@@ -56,10 +56,12 @@ struct EventDetailView: View {
                         .padding(.top, 18)
                         .padding(.bottom, 42)
                     }
-                }
-
+                
+                
                 toastOverlay
+                confirmationMomentOverlay
             }
+        }
             .ignoresSafeArea(edges: .top)
             .navigationBarHidden(true)
             .onAppear {
@@ -587,6 +589,62 @@ struct EventDetailView: View {
             }
             .allowsHitTesting(false)
             .zIndex(99)
+        }
+    }
+
+    @ViewBuilder
+    private var confirmationMomentOverlay: some View {
+        if let confirmedEvent = app.eventConfirmationMoment,
+           confirmedEvent.id == currentEvent.id {
+            ZStack {
+                Color.black.opacity(0.72)
+                    .ignoresSafeArea()
+
+                RadialGradient(
+                    colors: [
+                        Color.green.opacity(0.24),
+                        Color.orange.opacity(0.10),
+                        Color.clear
+                    ],
+                    center: .center,
+                    startRadius: 10,
+                    endRadius: 320
+                )
+                .ignoresSafeArea()
+
+                VStack(spacing: 14) {
+                    ZStack {
+                        Circle()
+                            .fill(Color.green.opacity(0.18))
+                            .frame(width: 112, height: 112)
+                            .blur(radius: 12)
+
+                        Circle()
+                            .stroke(Color.white.opacity(0.16), lineWidth: 1)
+                            .frame(width: 92, height: 92)
+
+                        Image(systemName: "checkmark.seal.fill")
+                            .font(.system(size: 38, weight: .black))
+                            .foregroundColor(.green.opacity(0.96))
+                    }
+
+                    Text("ACCESS CONFIRMED")
+                        .font(.system(size: 26, weight: .black, design: .monospaced))
+                        .foregroundColor(.white)
+                        .multilineTextAlignment(.center)
+
+                    Text(confirmedEvent.title)
+                        .font(.system(size: 14, weight: .bold, design: .rounded))
+                        .foregroundColor(.white.opacity(0.68))
+                        .multilineTextAlignment(.center)
+                        .lineLimit(3)
+                        .padding(.horizontal, 28)
+                }
+                .padding(.horizontal, 24)
+            }
+            .transition(.opacity.combined(with: .scale(scale: 1.02)))
+            .zIndex(120)
+            .allowsHitTesting(false)
         }
     }
 }
