@@ -14,4 +14,5 @@ TriviaGoatFirebase/*client_secret*.json
 .env
 .env.*
 *.txt
+*.pdf
 GoogleService-Info-*.plist
