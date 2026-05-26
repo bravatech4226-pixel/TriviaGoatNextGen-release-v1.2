@@ -26,7 +26,7 @@ struct EventDetailView: View {
     @State private var now = Date()
     @State private var pulse = false
 
-    private let timer = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
+    private let timer = Timer.publish(every: 10, on: .main, in: .common).autoconnect()
 
     private var currentEvent: AppState.TGEvent {
         app.events.first(where: { $0.id == event.id }) ?? event
@@ -36,13 +36,13 @@ struct EventDetailView: View {
         GeometryReader { geo in
             ZStack {
                 SpaceBackground()
-                
+
                 EventDetailAmbientGlow(pulse: pulse, statusColor: statusColor)
                     .allowsHitTesting(false)
-                
+
                 VStack(spacing: 0) {
                     header(safeTop: geo.safeAreaInsets.top)
-                    
+
                     ScrollView(showsIndicators: false) {
                         VStack(alignment: .leading, spacing: 18) {
                             heroCard
@@ -56,12 +56,11 @@ struct EventDetailView: View {
                         .padding(.top, 18)
                         .padding(.bottom, 42)
                     }
-                
-                
+                }
+
                 toastOverlay
                 confirmationMomentOverlay
             }
-        }
             .ignoresSafeArea(edges: .top)
             .navigationBarHidden(true)
             .onAppear {

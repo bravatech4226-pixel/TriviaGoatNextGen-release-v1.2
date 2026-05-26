@@ -2,11 +2,12 @@
 //  EventActionDock.swift
 //  TriviaGoatNextGen
 //
-//  Created by Michael Houlder on 2026-05-14.
+//  Created by Michael Houlder on 2026-05-16.
 //
 //  PURPOSE:
 //  Public event CTA dock.
 //  Handles RSVP / waitlist / calendar / share presentation.
+//  Synced to latest AppState event ecosystem.
 //
 
 import SwiftUI
@@ -23,9 +24,16 @@ struct EventActionDock: View {
     @State private var now = Date()
     @State private var pulse = false
 
-    @AppStorage("tg.events.calendarSavedIDs") private var savedCalendarIDsRaw: String = ""
+    @AppStorage("tg.events.calendarSavedIDs")
+    private var savedCalendarIDsRaw: String = ""
 
-    private let timer = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
+    private let timer = Timer
+        .publish(every: 30, on: .main, in: .common)
+        .autoconnect()
+
+    private var syncedEvent: AppState.TGEvent {
+        app.events.first(where: { $0.id == event.id }) ?? event
+    }
 
     var body: some View {
         VStack(spacing: 12) {
@@ -45,6 +53,8 @@ struct EventActionDock: View {
                 .shadow(color: dockGlowColor, radius: 24, x: 0, y: 14)
         )
         .onAppear {
+            app.listenToRSVPState(for: syncedEvent.id)
+
             withAnimation(.easeInOut(duration: 1.55).repeatForever(autoreverses: true)) {
                 pulse = true
             }
@@ -53,6 +63,8 @@ struct EventActionDock: View {
             now = value
         }
     }
+
+    // MARK: - Header
 
     private var commandHeader: some View {
         HStack(spacing: 10) {
@@ -84,6 +96,8 @@ struct EventActionDock: View {
             statusPill
         }
     }
+
+    // MARK: - Status Strip
 
     private var liveStatusStrip: some View {
         HStack(spacing: 10) {
@@ -118,6 +132,8 @@ struct EventActionDock: View {
         )
     }
 
+    // MARK: - Primary CTA
+
     private var primaryAction: some View {
         Button {
             handlePrimaryAction()
@@ -141,35 +157,41 @@ struct EventActionDock: View {
                             .stroke(primaryStroke, lineWidth: 1)
                     )
             )
-            .shadow(color: primaryShadow, radius: primaryDisabled ? 0 : 16, x: 0, y: 10)
+            .shadow(
+                color: primaryShadow,
+                radius: primaryDisabled ? 0 : 16,
+                x: 0,
+                y: 10
+            )
         }
         .buttonStyle(.plain)
         .disabled(primaryDisabled)
     }
 
+    // MARK: - Secondary CTA Row
+
     private var secondaryActionRow: some View {
         HStack(spacing: 10) {
+
             secondaryButton(
                 title: calendarTitle,
                 systemImage: calendarIcon,
-                isProcessing: isProcessingCalendar,
-                action: {
-                    saveCalendarAndReminders()
-                }
-            )
+                isProcessing: isProcessingCalendar
+            ) {
+                saveCalendarAndReminders()
+            }
             .disabled(isProcessingCalendar || !hasDate || hasCalendarSaved)
             .opacity(hasDate ? 1 : 0.45)
 
             secondaryButton(
                 title: "SHARE",
                 systemImage: "square.and.arrow.up",
-                isProcessing: false,
-                action: {
-                    HapticManager.instance.impact(.light)
-                    SpatialAudioManager.shared.play(.uiTap)
-                    onShare()
-                }
-            )
+                isProcessing: false
+            ) {
+                HapticManager.instance.impact(.light)
+                SpatialAudioManager.shared.play(.uiTap)
+                onShare()
+            }
         }
     }
 
@@ -179,6 +201,7 @@ struct EventActionDock: View {
         isProcessing: Bool,
         action: @escaping () -> Void
     ) -> some View {
+
         Button(action: action) {
             HStack(spacing: 8) {
                 Image(systemName: isProcessing ? "arrow.triangle.2.circlepath" : systemImage)
@@ -211,54 +234,66 @@ struct EventActionDock: View {
         .buttonStyle(.plain)
     }
 
+    // MARK: - Status Pill
+
     private var statusPill: some View {
         Text(statusPillText)
             .font(.system(size: 9, weight: .black, design: .monospaced))
             .foregroundColor(statusPillForeground)
             .padding(.vertical, 5)
             .padding(.horizontal, 9)
-            .background(Capsule().fill(statusPillBackground))
+            .background(
+                Capsule()
+                    .fill(statusPillBackground)
+            )
     }
 
     // MARK: - State
 
     private var isOrganizer: Bool {
-        app.isOrganizer(of: event)
+        app.isOrganizer(of: syncedEvent)
     }
 
     private var hasRSVPed: Bool {
-        app.hasRSVPedToEvent(event.id)
+        app.hasRSVPedToEvent(syncedEvent.id)
     }
 
     private var hasWaitlisted: Bool {
-        app.hasJoinedWaitlist(event.id)
+        app.hasJoinedWaitlist(syncedEvent.id)
     }
 
     private var isFull: Bool {
-        event.capacity > 0 && event.attendeeCount >= event.capacity
+        syncedEvent.capacity > 0 &&
+        syncedEvent.attendeeCount >= syncedEvent.capacity
     }
 
     private var hasDate: Bool {
-        event.startsAt != nil
+        syncedEvent.startsAt != nil
     }
 
     private var hasCalendarSaved: Bool {
-        savedCalendarIDs.contains(event.id)
+        savedCalendarIDs.contains(syncedEvent.id)
     }
 
     private var isLiveNow: Bool {
-        guard let startsAt = event.startsAt else { return false }
-        let endsAt = event.endsAt ?? startsAt.addingTimeInterval(2 * 60 * 60)
+        guard let startsAt = syncedEvent.startsAt else { return false }
+
+        let endsAt = syncedEvent.endsAt
+        ?? startsAt.addingTimeInterval(2 * 60 * 60)
+
         return now >= startsAt && now <= endsAt
     }
 
     private var hasEnded: Bool {
-        guard let startsAt = event.startsAt else { return false }
-        let endsAt = event.endsAt ?? startsAt.addingTimeInterval(2 * 60 * 60)
+        guard let startsAt = syncedEvent.startsAt else { return false }
+
+        let endsAt = syncedEvent.endsAt
+        ?? startsAt.addingTimeInterval(2 * 60 * 60)
+
         return now > endsAt
     }
 
-    // MARK: - Command Copy
+    // MARK: - Copy
 
     private var commandTitle: String {
         if isOrganizer { return "HOST COMMAND" }
@@ -270,20 +305,50 @@ struct EventActionDock: View {
     }
 
     private var commandSubtitle: String {
-        if isOrganizer { return "You are hosting this event." }
-        if hasRSVPed { return "You’re locked in. Add it to calendar or share the event." }
-        if hasWaitlisted { return "You’re on the waitlist. Watch for updates." }
-        if hasEnded { return "This event has completed." }
-        if isFull && event.waitlistEnabled { return "Capacity is full, but waitlist access is open." }
-        if isFull { return "This event is currently full." }
-        if isLiveNow { return "The event is active now. RSVP and stay close." }
+        if isOrganizer {
+            return "You are hosting this event."
+        }
+
+        if hasRSVPed {
+            return "You’re locked in. Add it to calendar or share the event."
+        }
+
+        if hasWaitlisted {
+            return "You’re on the waitlist. Watch for updates."
+        }
+
+        if hasEnded {
+            return "This event has completed."
+        }
+
+        if isFull && syncedEvent.waitlistEnabled {
+            return "Capacity is full, but waitlist access is open."
+        }
+
+        if isFull {
+            return "This event is currently full."
+        }
+
+        if isLiveNow { return "Live event access is currently active." }
+
         return "RSVP, save the date, or share the event."
     }
 
+    // MARK: - Status Strip Copy
+
     private var liveStatusIcon: String {
-        if event.startsAt == nil { return "calendar.badge.clock" }
-        if isLiveNow { return "dot.radiowaves.left.and.right" }
-        if hasEnded { return "checkmark.seal.fill" }
+        if syncedEvent.startsAt == nil {
+            return "calendar.badge.clock"
+        }
+
+        if isLiveNow {
+            return "dot.radiowaves.left.and.right"
+        }
+
+        if hasEnded {
+            return "checkmark.seal.fill"
+        }
+
         return "timer"
     }
 
@@ -291,26 +356,53 @@ struct EventActionDock: View {
         if isOrganizer { return "HOST CONTROLS READY" }
         if isLiveNow { return "LIVE NOW" }
         if hasEnded { return "EVENT COMPLETE" }
-        if event.startsAt == nil { return "DATE COMING" }
+        if syncedEvent.startsAt == nil { return "DATE COMING" }
+
         return "STARTS \(timeUntilStartText)"
     }
 
     private var liveStatusSubtitle: String {
-        if isOrganizer { return "Organizer state is active." }
-        if hasRSVPed { return "Registered — calendar save is recommended." }
-        if hasWaitlisted { return "Waitlisted — watch for capacity changes." }
-        if isFull && event.waitlistEnabled { return "Event is full — waitlist is available." }
-        if isFull { return "Event is currently full." }
-        if event.startsAt == nil { return "Schedule will be announced soon." }
-        return "Limited access available."
+        if isOrganizer {
+            return "Organizer state is active."
+        }
+
+        if hasRSVPed {
+            return "You're confirmed and ready for launch."
+        }
+
+        if hasWaitlisted {
+            return "Waitlisted — watch for capacity changes."
+        }
+
+        if isLiveNow {
+            return "This event is happening right now."
+        }
+
+        if isFull && event.waitlistEnabled {
+            return "Event is full — waitlist access is available."
+        }
+
+        if isFull {
+            return "This event is currently full."
+        }
+
+        if event.startsAt == nil {
+            return "Schedule will be announced soon."
+        }
+
+        return "Secure your spot before launch."
     }
 
     private var timeUntilStartText: String {
-        guard let startsAt = event.startsAt else { return "SOON" }
+        guard let startsAt = syncedEvent.startsAt else {
+            return "SOON"
+        }
 
         let seconds = Int(startsAt.timeIntervalSince(now))
 
-        if seconds <= 0 { return "NOW" }
+        if seconds <= 0 {
+            return "NOW"
+        }
 
         let days = seconds / 86_400
         let hours = (seconds % 86_400) / 3_600
@@ -327,13 +419,14 @@ struct EventActionDock: View {
         return "IN \(max(1, minutes))M"
     }
 
-    // MARK: - Primary Action
+    // MARK: - Primary Action State
 
     private var primaryDisabled: Bool {
         isOrganizer ||
         hasRSVPed ||
         hasWaitlisted ||
         hasEnded ||
+        isLiveNow ||
         (isFull && !event.waitlistEnabled)
     }
 
@@ -342,6 +435,7 @@ struct EventActionDock: View {
         if hasEnded { return "EVENT ENDED" }
         if hasRSVPed { return "REGISTERED" }
         if hasWaitlisted { return "WAITLISTED" }
+        if isLiveNow { return "EVENT LIVE" }
         if isFull && event.waitlistEnabled { return "JOIN WAITLIST" }
         if isFull { return "FULL" }
         return "RSVP NOW"
@@ -352,21 +446,28 @@ struct EventActionDock: View {
         if hasEnded { return "checkmark.seal.fill" }
         if hasRSVPed { return "checkmark.seal.fill" }
         if hasWaitlisted { return "clock.badge.checkmark" }
+        if isLiveNow { return "dot.radiowaves.left.and.right" }
         if isFull && event.waitlistEnabled { return "person.crop.circle.badge.plus" }
         if isFull { return "lock.fill" }
         return "bolt.fill"
     }
 
     private var primaryForeground: Color {
-        if primaryDisabled && !hasRSVPed && !hasWaitlisted && !isOrganizer {
+        if primaryDisabled &&
+            !hasRSVPed &&
+            !hasWaitlisted &&
+            !isOrganizer {
             return Color.white.opacity(0.45)
         }
 
-        return Color.black
+        return .black
     }
 
     private var primaryBackground: Color {
-        if primaryDisabled && !hasRSVPed && !hasWaitlisted && !isOrganizer {
+        if primaryDisabled &&
+            !hasRSVPed &&
+            !hasWaitlisted &&
+            !isOrganizer {
             return Color.white.opacity(0.08)
         }
 
@@ -386,7 +487,10 @@ struct EventActionDock: View {
     }
 
     private var primaryStroke: Color {
-        if primaryDisabled && !hasRSVPed && !hasWaitlisted && !isOrganizer {
+        if primaryDisabled &&
+            !hasRSVPed &&
+            !hasWaitlisted &&
+            !isOrganizer {
             return Color.white.opacity(0.12)
         }
 
@@ -394,26 +498,44 @@ struct EventActionDock: View {
     }
 
     private var primaryShadow: Color {
-        if hasRSVPed { return Color.green.opacity(0.16) }
+        if hasRSVPed {
+            return Color.green.opacity(0.16)
+        }
+
         return Color.orange.opacity(0.20)
     }
 
     // MARK: - Secondary Buttons
 
     private var calendarTitle: String {
-        if isProcessingCalendar { return "ADDING..." }
-        if hasCalendarSaved { return "IN CALENDAR" }
-        if !hasDate { return "DATE COMING" }
+        if isProcessingCalendar {
+            return "ADDING..."
+        }
+
+        if hasCalendarSaved {
+            return "IN CALENDAR"
+        }
+
+        if !hasDate {
+            return "DATE COMING"
+        }
+
         return "ADD TO CAL"
     }
 
     private var calendarIcon: String {
-        if hasCalendarSaved { return "calendar.badge.checkmark" }
-        if !hasDate { return "calendar.badge.clock" }
+        if hasCalendarSaved {
+            return "calendar.badge.checkmark"
+        }
+
+        if !hasDate {
+            return "calendar.badge.clock"
+        }
+
         return "calendar.badge.plus"
     }
 
-    // MARK: - Status Styling
+    // MARK: - Styling
 
     private var statusPillText: String {
         if isOrganizer { return "HOST" }
@@ -421,7 +543,13 @@ struct EventActionDock: View {
         if hasWaitlisted { return "WAITLIST" }
         if hasEnded { return "CLOSED" }
         if isLiveNow { return "LIVE" }
-        if isFull { return event.waitlistEnabled ? "WAITLIST" : "FULL" }
+
+        if isFull {
+            return syncedEvent.waitlistEnabled
+            ? "WAITLIST"
+            : "FULL"
+        }
+
         return "OPEN"
     }
 
@@ -431,19 +559,35 @@ struct EventActionDock: View {
         if hasEnded { return .white.opacity(0.58) }
         if isLiveNow { return .orange }
         if isFull { return .red }
+
         return .orange
     }
 
     private var statusPillForeground: Color {
-        if hasRSVPed || isLiveNow { return .black }
+        if hasRSVPed || isLiveNow {
+            return .black
+        }
+
         return .white.opacity(0.88)
     }
 
     private var statusPillBackground: Color {
-        if hasRSVPed { return .green.opacity(0.95) }
-        if isLiveNow { return .orange.opacity(0.96) }
-        if hasEnded { return .white.opacity(0.12) }
-        if isFull { return .red.opacity(0.30) }
+        if hasRSVPed {
+            return .green.opacity(0.95)
+        }
+
+        if isLiveNow {
+            return .orange.opacity(0.96)
+        }
+
+        if hasEnded {
+            return .white.opacity(0.12)
+        }
+
+        if isFull {
+            return .red.opacity(0.30)
+        }
+
         return .white.opacity(0.12)
     }
 
@@ -458,6 +602,7 @@ struct EventActionDock: View {
     // MARK: - RSVP Flow
 
     private func handlePrimaryAction() {
+
         HapticManager.instance.impact(.medium)
         SpatialAudioManager.shared.play(.uiTap)
 
@@ -468,6 +613,10 @@ struct EventActionDock: View {
 
         if hasEnded {
             app.showEventToast("EVENT ENDED")
+            return
+        }
+        if isLiveNow {
+            app.showEventToast("EVENT ALREADY LIVE")
             return
         }
 
@@ -482,8 +631,9 @@ struct EventActionDock: View {
         }
 
         if isFull {
-            if event.waitlistEnabled {
-                app.joinEventWaitlist(event)
+
+            if syncedEvent.waitlistEnabled {
+                app.joinEventWaitlist(syncedEvent)
             } else {
                 app.showEventToast("EVENT FULL")
             }
@@ -491,13 +641,14 @@ struct EventActionDock: View {
             return
         }
 
-        app.RSVPToEvent(event)
+        app.RSVPToEvent(syncedEvent)
     }
 
-    // MARK: - Calendar + Reminder Flow
+    // MARK: - Calendar Flow
 
     private func saveCalendarAndReminders() {
-        guard event.startsAt != nil else {
+
+        guard syncedEvent.startsAt != nil else {
             app.showEventToast("DATE COMING")
             return
         }
@@ -516,24 +667,30 @@ struct EventActionDock: View {
 
             do {
                 let calendarEventID = try await EventReminderManager.shared
-                    .saveEventToCalendar(event)
+                    .saveEventToCalendar(syncedEvent)
 
                 print("📅 Saved Apple Calendar EKEvent ID:", calendarEventID)
 
-                try? await EventReminderManager.shared.scheduleLocalReminders(for: event)
+                try? await EventReminderManager.shared
+                    .scheduleLocalReminders(for: syncedEvent)
 
-                savedCalendarIDs.insert(event.id)
+                savedCalendarIDs.insert(syncedEvent.id)
 
                 app.showEventToast("ADDED TO CALENDAR")
 
             } catch {
+
                 app.showEventToast("CALENDAR FAILED")
-                print("⚠️ Event calendar save failed: \(error.localizedDescription)")
+
+                print(
+                    "⚠️ Event calendar save failed:",
+                    error.localizedDescription
+                )
             }
         }
     }
 
-    // MARK: - Local Calendar Saved Store
+    // MARK: - Calendar Saved Store
 
     private var savedCalendarIDs: Set<String> {
         get {
@@ -546,7 +703,9 @@ struct EventActionDock: View {
         }
 
         nonmutating set {
-            savedCalendarIDsRaw = newValue.sorted().joined(separator: ",")
+            savedCalendarIDsRaw = newValue
+                .sorted()
+                .joined(separator: ",")
         }
     }
 }

@@ -1272,7 +1272,9 @@ final class AppState: ObservableObject {
     
     func handleScenePhase(_ phase: ScenePhase) {
         guard phase == .active else { return }
-        
+
+        refreshEvents()
+
         syncTask?.cancel()
         syncTask = Task { [weak self] in
             guard let self else { return }

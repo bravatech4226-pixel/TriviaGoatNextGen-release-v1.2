@@ -2,9 +2,6 @@
 //  EventReminderManager.swift
 //  TriviaGoatNextGen
 //
-//  PURPOSE:
-//  EventKit calendar save/update + local notification reminder helper.
-//
 
 import Foundation
 import EventKit
@@ -49,22 +46,15 @@ final class EventReminderManager {
             calendarEvent.calendar = eventStore.defaultCalendarForNewEvents
         }
 
+        guard calendarEvent.calendar != nil else {
+            throw EventReminderError.calendarSaveFailed
+        }
+
         calendarEvent.alarms = nil
         calendarEvent.addAlarm(EKAlarm(relativeOffset: -30 * 60))
+        calendarEvent.addAlarm(EKAlarm(relativeOffset: -5 * 60))
 
-        print("📅 EVENT SAVE BEGIN")
-        print("📅 TITLE:", calendarEvent.title ?? "nil")
-        print("📅 START:", calendarEvent.startDate ?? Date())
-        print("📅 END:", calendarEvent.endDate ?? Date())
-        print("📅 NOTES:", calendarEvent.notes ?? "nil")
-        print("📅 CALENDAR:", calendarEvent.calendar.title)
-        print("📅 DEFAULT CAL:", eventStore.defaultCalendarForNewEvents?.title ?? "nil")
-        
         try eventStore.save(calendarEvent, span: .thisEvent, commit: true)
-        try eventStore.save(calendarEvent, span: .thisEvent, commit: true)
-
-        print("✅ EVENT SAVED")
-        print("✅ EVENT ID:", calendarEvent.eventIdentifier ?? "nil")
 
         guard let eventIdentifier = calendarEvent.eventIdentifier else {
             throw EventReminderError.calendarSaveFailed
@@ -83,47 +73,48 @@ final class EventReminderManager {
             throw EventReminderError.notificationPermissionDenied
         }
 
-        let reminderDate = startsAt.addingTimeInterval(-30 * 60)
+        let reminderDates = [
+            startsAt.addingTimeInterval(-30 * 60),
+            startsAt.addingTimeInterval(-5 * 60)
+        ]
 
-        guard reminderDate > Date() else {
-            throw EventReminderError.reminderDateInPast
-        }
-
-        let content = UNMutableNotificationContent()
-        content.title = event.title
-        content.body = event.heroLine.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            ? "Your Trivia GOAT event starts soon."
-            : event.heroLine
-        content.sound = .default
-
-        let components = Calendar.current.dateComponents(
-            [.year, .month, .day, .hour, .minute],
-            from: reminderDate
-        )
-
-        let trigger = UNCalendarNotificationTrigger(
-            dateMatching: components,
-            repeats: false
-        )
-
-        let request = UNNotificationRequest(
-            identifier: reminderIdentifier(for: event),
-            content: content,
-            trigger: trigger
-        )
+        let identifiers = reminderIdentifiers(for: event)
 
         UNUserNotificationCenter.current()
-            .removePendingNotificationRequests(
-                withIdentifiers: [reminderIdentifier(for: event)]
+            .removePendingNotificationRequests(withIdentifiers: identifiers)
+
+        for (index, reminderDate) in reminderDates.enumerated() {
+            guard reminderDate > Date() else { continue }
+
+            let content = UNMutableNotificationContent()
+            content.title = event.title
+            content.body = reminderBody(for: event, minutesBefore: index == 0 ? 30 : 5)
+            content.sound = .default
+
+            let components = Calendar.current.dateComponents(
+                [.year, .month, .day, .hour, .minute],
+                from: reminderDate
             )
 
-        try await UNUserNotificationCenter.current().add(request)
+            let trigger = UNCalendarNotificationTrigger(
+                dateMatching: components,
+                repeats: false
+            )
+
+            let request = UNNotificationRequest(
+                identifier: identifiers[index],
+                content: content,
+                trigger: trigger
+            )
+
+            try await UNUserNotificationCenter.current().add(request)
+        }
     }
 
     func cancelLocalReminders(for event: AppState.TGEvent) {
         UNUserNotificationCenter.current()
             .removePendingNotificationRequests(
-                withIdentifiers: [reminderIdentifier(for: event)]
+                withIdentifiers: reminderIdentifiers(for: event)
             )
     }
 
@@ -176,17 +167,14 @@ final class EventReminderManager {
         endsAt: Date,
         marker: String
     ) -> EKEvent? {
-        let searchStart = startsAt.addingTimeInterval(-24 * 60 * 60)
-        let searchEnd = endsAt.addingTimeInterval(24 * 60 * 60)
-
         let predicate = eventStore.predicateForEvents(
-            withStart: searchStart,
-            end: searchEnd,
+            withStart: startsAt.addingTimeInterval(-24 * 60 * 60),
+            end: endsAt.addingTimeInterval(24 * 60 * 60),
             calendars: nil
         )
 
-        return eventStore.events(matching: predicate).first { ekEvent in
-            ekEvent.notes?.contains(marker) == true
+        return eventStore.events(matching: predicate).first {
+            $0.notes?.contains(marker) == true
         }
     }
 
@@ -203,22 +191,41 @@ final class EventReminderManager {
             lines.append(heroLine)
         }
 
-        if !summary.isEmpty {
+        if !summary.isEmpty && summary != heroLine {
+            lines.append("")
             lines.append(summary)
         }
 
+        lines.append("")
+        lines.append("Open event:")
+        lines.append("https://triviagoat.ca/events/\(event.id)")
         lines.append("")
         lines.append(marker)
 
         return lines.joined(separator: "\n")
     }
 
+    private func reminderBody(for event: AppState.TGEvent, minutesBefore: Int) -> String {
+        let heroLine = event.heroLine.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if !heroLine.isEmpty {
+            return heroLine
+        }
+
+        return minutesBefore <= 5
+            ? "Your Trivia GOAT event is about to start."
+            : "Your Trivia GOAT event starts in \(minutesBefore) minutes."
+    }
+
     private func calendarMarker(for event: AppState.TGEvent) -> String {
         "TriviaGOATEventID:\(event.id)"
     }
 
-    private func reminderIdentifier(for event: AppState.TGEvent) -> String {
-        "tg.event.reminder.\(event.id)"
+    private func reminderIdentifiers(for event: AppState.TGEvent) -> [String] {
+        [
+            "tg.event.reminder.\(event.id).30m",
+            "tg.event.reminder.\(event.id).5m"
+        ]
     }
 }
 
