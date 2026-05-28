@@ -386,7 +386,14 @@ type PlatformEventAccessLeadDoc = {
   source?: "public_request_access";
   sourceCampaign?: string;
   linkedUid?: string | null;
-};
+    referralSource?: string;
+    referralMedium?: string;
+    referralCampaign?: string;
+    referralContent?: string;
+    landingURL?: string;
+
+    attribution?: EventAttribution;
+  };
 
 type PlatformEventWaitlistDoc = {
   uid: string;
@@ -4025,23 +4032,58 @@ export const promoteFromWaitlist = onCall(
     return { success: true, eventId, uid, status: "approved" };
   }
 );
+            type EventAttribution = {
+              ref?: string;
+              utm_source?: string;
+              utm_medium?: string;
+              utm_campaign?: string;
+              utm_content?: string;
+              landingURL?: string;
+            };
 
-/**
- * Captures a public event access lead and sends a verification email.
- * @param {CallableRequest} request - Callable request.
- * @return {Promise<object>} Submission result.
- */
-      export const submitEventAccessLead = onCall(
+            type SubmitEventAccessLeadData = {
+              eventId?: string;
+              email?: string;
+              displayName?: string;
+              note?: string;
+              attribution?: EventAttribution;
+            };
+
+            /**
+             * Captures a public event access lead and sends a verification email.
+             * @param {CallableRequest} request - Callable request.
+             * @return {Promise<object>} Submission result.
+             */
+            export const submitEventAccessLead = onCall(
         { secrets: [RESEND_API_KEY, RESEND_FROM_EMAIL] },
-        async (request: CallableRequest): Promise<object> => {
-          const data = (request.data ?? {}) as Record<string, unknown>;
-          const eventId = asTrimmedString(data.eventId);
+            async (
+              request: CallableRequest<SubmitEventAccessLeadData>
+            ): Promise<object> => {
+            const data = (request.data ?? {}) as Record<string, unknown>;
+            const attribution: EventAttribution = data.attribution ?? {};
+            const referralSource = String(
+              attribution.ref ||
+                attribution.utm_source ||
+                "direct"
+            ).trim();
+            const referralMedium = String(
+              attribution.utm_medium || "unknown"
+            ).trim();
+            const referralCampaign = String(
+              attribution.utm_campaign || ""
+            ).trim();
+            const referralContent = String(
+              attribution.utm_content || ""
+            ).trim();
+            const landingURL = String(
+              attribution.landingURL || ""
+            ).trim();
+            const eventId = asTrimmedString(data.eventId);
           const email = asTrimmedString(data.email).toLowerCase();
           const rawDisplayName = asTrimmedString(data.displayName);
           const displayName = normalizeEventLeadDisplayName(rawDisplayName, email);
           const note = asTrimmedString(data.note).slice(0, 240);
-
-          if (!eventId) {
+            if (!eventId) {
             throw new HttpsError("invalid-argument", "Missing eventId.");
           }
 
@@ -4117,6 +4159,7 @@ export const promoteFromWaitlist = onCall(
               displayName,
               note,
               eventId,
+
               status: "pending_verification",
               verificationMethod: "email_link",
               verificationTokenHash,
@@ -4124,12 +4167,24 @@ export const promoteFromWaitlist = onCall(
               verificationExpiresAt,
               verificationSentAt: null,
               verifiedAt: null,
+
               requestedAt: FieldValue.serverTimestamp(),
+
+              attribution,
+              referralSource,
+              referralMedium,
+              referralCampaign,
+              referralContent,
+              landingURL,
+
               invitedAt: null,
               approvedAt: null,
+
               updatedAt: FieldValue.serverTimestamp(),
+
               source: "public_request_access",
               sourceCampaign: "toronto_tech_week_launch",
+
               linkedUid: null,
             } as PlatformEventAccessLeadDoc,
             { merge: true }
@@ -4350,8 +4405,18 @@ async function processVerifiedLead(eventId: string, email: string): Promise<stri
             };
           }
 
-          const submittedHash = hashToken(token);
-          if (submittedHash !== leadData.verificationTokenHash) {
+            const submittedHash = hashToken(token);
+
+            logger.info("VERIFY TOKEN DEBUG", {
+              eventId,
+              email,
+              incomingTokenLength: token.length,
+              incomingTokenHash: submittedHash,
+              storedTokenHash: leadData.verificationTokenHash,
+              hashesMatch: submittedHash === leadData.verificationTokenHash,
+            });
+
+            if (submittedHash !== leadData.verificationTokenHash) {
             return {
               success: false,
               eventId,
