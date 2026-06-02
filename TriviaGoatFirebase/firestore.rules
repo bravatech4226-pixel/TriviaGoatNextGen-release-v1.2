@@ -1,82 +1,114 @@
 rules_version = '2';
 service cloud.firestore {
-  match /databases/{database}/documents {
+match /databases/{database}/documents {
 
-    // --------------------
-    // Helpers
-    // --------------------
+    /**
+     * Returns true when the request has a Firebase Auth identity.
+     */
     function signedIn() {
       return request.auth != null;
     }
 
+    /**
+     * Returns true when the request auth UID matches the supplied UID.
+     */
     function isSelf(uid) {
       return signedIn() && request.auth.uid == uid;
     }
 
+    /**
+     * Hard-coded owner fallback for emergency/admin access.
+     */
     function isOwnerAdmin() {
-      return signedIn() &&
-        request.auth.uid == "kqp5LxM5DvSDL3BUEpHmFeoNgw03";
+      return signedIn()
+        && request.auth.uid == "kqp5LxM5DvSDL3BUEpHmFeoNgw03";
     }
 
+    /**
+     * Returns the admin role document path for the active user.
+     */
     function adminRoleDocPath() {
       return /databases/$(database)/documents/admin/roles/roles/$(request.auth.uid);
     }
 
+    /**
+     * Returns true when the active user has an admin role document.
+     */
     function hasAdminRoleDoc() {
       return signedIn() && exists(adminRoleDocPath());
     }
 
+    /**
+     * Returns the active user's admin role document.
+     */
     function adminRoleDoc() {
       return get(adminRoleDocPath());
     }
 
+    /**
+     * Returns true when the active user can manage web/admin surfaces.
+     */
     function isWebAdmin() {
       return isOwnerAdmin() || (
-        hasAdminRoleDoc() &&
-        (
-          adminRoleDoc().data.isSuperAdmin == true ||
-          adminRoleDoc().data.canManageWeb == true ||
-          adminRoleDoc().data.canManageGlobalBattle == true ||
-          adminRoleDoc().data.canManageBlog == true ||
-          adminRoleDoc().data.canManageStats == true ||
-          adminRoleDoc().data.canManageUsers == true
+        hasAdminRoleDoc()
+        && (
+          adminRoleDoc().data.isSuperAdmin == true
+          || adminRoleDoc().data.canManageWeb == true
+          || adminRoleDoc().data.canManageGlobalBattle == true
+          || adminRoleDoc().data.canManageBlog == true
+          || adminRoleDoc().data.canManageStats == true
+          || adminRoleDoc().data.canManageUsers == true
         )
       );
     }
 
+    /**
+     * Returns true when the active user can manage blog content.
+     */
     function isBlogAdmin() {
       return isOwnerAdmin() || (
-        hasAdminRoleDoc() &&
-        (
-          adminRoleDoc().data.isSuperAdmin == true ||
-          adminRoleDoc().data.canManageBlog == true
+        hasAdminRoleDoc()
+        && (
+          adminRoleDoc().data.isSuperAdmin == true
+          || adminRoleDoc().data.canManageBlog == true
         )
       );
     }
 
+    /**
+     * Returns true when the active user can manage public stats.
+     */
     function isStatsAdmin() {
       return isOwnerAdmin() || (
-        hasAdminRoleDoc() &&
-        (
-          adminRoleDoc().data.isSuperAdmin == true ||
-          adminRoleDoc().data.canManageStats == true
+        hasAdminRoleDoc()
+        && (
+          adminRoleDoc().data.isSuperAdmin == true
+          || adminRoleDoc().data.canManageStats == true
         )
       );
     }
 
+    /**
+     * Allows approved comments, admins, or the comment author to read.
+     */
     function canReadComment() {
       return resource.data.status == "approved"
         || isWebAdmin()
         || (
-          signedIn() &&
-          resource.data.authorUID is string &&
-          resource.data.authorUID == request.auth.uid
+          signedIn()
+          && resource.data.authorUID is string
+          && resource.data.authorUID == request.auth.uid
         );
     }
+    /**
+    * Returns true when the active user is the organizer of the current event doc.
+    */
+    function isEventOrganizer() {
+    return signedIn()
+    && resource.data.organizerUID is string
+    && resource.data.organizerUID == request.auth.uid;
+    }
 
-    // --------------------
-    // USERS
-    // --------------------
     match /users/{uid} {
       allow read: if signedIn() || resource.data.isPublic == true;
       allow create: if isSelf(uid) || isWebAdmin();
@@ -84,18 +116,11 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // --------------------
-    // USERNAMES
-    // --------------------
     match /usernames/{usernameKey} {
       allow read: if signedIn();
       allow write, delete: if false;
     }
 
-    // --------------------
-    // LEADERBOARD (SINGULAR)
-    // Legacy path - now public-safe
-    // --------------------
     match /leaderboard/{docId} {
       allow read: if true;
       allow write, delete: if false;
@@ -106,10 +131,6 @@ service cloud.firestore {
       }
     }
 
-    // --------------------
-    // LEADERBOARDS (PLURAL)
-    // Legacy path - now public-safe
-    // --------------------
     match /leaderboards/{docId} {
       allow read: if true;
       allow write, delete: if false;
@@ -120,64 +141,42 @@ service cloud.firestore {
       }
     }
 
-    // --------------------
-    // ADMIN CONFIG (LEGACY PATH)
-    // --------------------
     match /admin/config/config/{docId} {
       allow read: if signedIn();
       allow create, update: if isWebAdmin();
       allow delete: if false;
     }
 
-    // --------------------
-    // ADMIN CONFIG (LIVE SETTINGS PATH)
-    // --------------------
     match /adminConfig/{docId} {
-    allow read: if signedIn();
-    allow create, update: if isWebAdmin();
-    allow delete: if false;
+      allow read: if signedIn();
+      allow create, update: if isWebAdmin();
+      allow delete: if false;
     }
 
-    // --------------------
-    // PLATFORM CONFIG (TEMP COMPATIBILITY)
-    // --------------------
     match /platformConfig/{docId} {
       allow read: if isWebAdmin();
       allow create, update: if isWebAdmin();
       allow delete: if false;
     }
 
-    // --------------------
-    // ADMIN ROLES
-    // --------------------
     match /admin/roles/roles/{uid} {
       allow read: if isWebAdmin();
       allow create, update: if isWebAdmin();
       allow delete: if false;
     }
 
-    // --------------------
-    // PUBLIC CONFIG
-    // --------------------
     match /public/config/config/{docId} {
       allow read: if true;
       allow create, update: if isWebAdmin();
       allow delete: if false;
     }
 
-    // --------------------
-    // FEATURE FLAGS
-    // Keep protected unless you intentionally create public mirrors
-    // --------------------
     match /featureFlags/{docId} {
       allow read: if signedIn();
       allow create, update: if isWebAdmin();
       allow delete: if false;
     }
 
-    // --------------------
-    // POSTS (MODERATED)
-    // --------------------
     match /posts/{postId} {
       allow read: if resource.data.status == "approved"
         || isWebAdmin()
@@ -233,17 +232,11 @@ service cloud.firestore {
       }
     }
 
-    // --------------------
-    // COMMENTS COLLECTION GROUP
-    // --------------------
     match /{path=**}/comments/{commentId} {
       allow read: if canReadComment();
       allow update: if isWebAdmin();
     }
 
-    // --------------------
-    // POST SUBMISSIONS (INTAKE)
-    // --------------------
     match /postSubmissions/{submissionId} {
       allow read: if isWebAdmin()
         || (
@@ -255,48 +248,37 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // --------------------
-    // MODERATION QUEUE
-    // --------------------
     match /moderationQueue/{queueId} {
       allow read: if isWebAdmin();
       allow create, update: if isWebAdmin();
       allow delete: if false;
     }
 
-   // --------------------
-// EVENTS
-// --------------------
-match /events/{eventId} {
+    match /events/{eventId} {
   allow read: if true;
-  allow create: if isWebAdmin();
 
-  allow update: if isWebAdmin()
+  allow create: if isWebAdmin()
     || (
       signedIn()
-      && request.resource.data.diff(resource.data).affectedKeys()
-        .hasOnly(["attendeeCount", "rsvpCount", "waitlistCount", "updatedAt"])
+      && request.resource.data.organizerUID == request.auth.uid
+      && request.resource.data.submittedByUID == request.auth.uid
+      && request.resource.data.approvalStatus == "draft"
+      && request.resource.data.status == "draft"
+      && request.resource.data.published == false
     );
 
+  allow update: if (
+    isWebAdmin()
+    || (
+      isEventOrganizer()
+      && request.resource.data.organizerUID == resource.data.organizerUID
+      && request.resource.data.attendeeCount == resource.data.attendeeCount
+      && request.resource.data.waitlistCount == resource.data.waitlistCount
+      && request.resource.data.approvalStatus in ["draft", "submitted", "rejected"]
+    )
+  );
+
   allow delete: if false;
-
-  match /rsvps/{uid} {
-    allow read: if isWebAdmin() || isSelf(uid);
-
-    allow create: if signedIn()
-      && isSelf(uid)
-      && request.resource.data.uid == uid
-      && request.resource.data.status in ["confirmed", "registered"];
-
-    allow update: if isWebAdmin()
-      || (
-        signedIn()
-        && isSelf(uid)
-        && request.resource.data.uid == uid
-      );
-
-    allow delete: if false;
-  }
 
   match /accessLeads/{leadId} {
     allow read: if isWebAdmin();
@@ -320,26 +302,43 @@ match /events/{eventId} {
 
   match /waitlist/{uid} {
     allow read: if isWebAdmin() || isSelf(uid);
-
-    allow create: if signedIn()
-      && isSelf(uid)
-      && request.resource.data.uid == uid;
-
-    allow update: if isWebAdmin()
-      || (
-        signedIn()
-        && isSelf(uid)
-        && request.resource.data.uid == uid
-      );
-
+    allow create: if signedIn() && isSelf(uid);
+    allow update: if isWebAdmin();
     allow delete: if false;
+  }
+
+  /**
+   * Event RSVP records.
+   * Clients may create or refresh only their own attendee record.
+   * Event counters remain server-authoritative via Cloud Functions.
+   */
+  match /attendees/{uid} {
+    allow read: if true;
+    allow create, update: if signedIn() && isSelf(uid);
+    allow delete: if signedIn() && isSelf(uid);
   }
 }
 
-    // --------------------
-    // SPONSORS / CAMPAIGNS / PLACEMENTS
-    // Keep admin-only
-    // --------------------
+    match /{path=**}/accessLeads/{leadId} {
+      allow read: if isWebAdmin();
+      allow update: if isWebAdmin();
+    }
+
+    match /{path=**}/accessRequests/{uid} {
+      allow read: if isWebAdmin() || isSelf(uid);
+      allow update: if isWebAdmin();
+    }
+
+    match /{path=**}/invites/{uid} {
+      allow read: if isWebAdmin() || isSelf(uid);
+      allow update: if isWebAdmin();
+    }
+
+    match /{path=**}/waitlist/{uid} {
+      allow read: if isWebAdmin() || isSelf(uid);
+      allow update: if isWebAdmin();
+    }
+
     match /sponsors/{sponsorId} {
       allow read: if isWebAdmin();
       allow create, update: if isWebAdmin();
@@ -358,27 +357,18 @@ match /events/{eventId} {
       allow delete: if false;
     }
 
-    // --------------------
-    // ANNOUNCEMENTS
-    // --------------------
     match /announcements/{announcementId} {
       allow read: if true;
       allow create, update: if isWebAdmin();
       allow delete: if false;
     }
 
-    // --------------------
-    // STATS
-    // --------------------
     match /stats/{statId} {
       allow read: if true;
       allow create, update: if isWebAdmin() || isStatsAdmin();
       allow delete: if false;
     }
 
-    // --------------------
-    // AUDIT LOGS
-    // --------------------
     match /auditLogs/{logId} {
       allow read: if isWebAdmin();
       allow create: if isWebAdmin();
@@ -391,9 +381,6 @@ match /events/{eventId} {
       allow update, delete: if false;
     }
 
-    // --------------------
-    // DAILY QUESTION PACKS
-    // --------------------
     match /dailyQuestionPacks/{docId} {
       allow read: if signedIn();
       allow write, delete: if false;
@@ -404,9 +391,6 @@ match /events/{eventId} {
       }
     }
 
-    // --------------------
-    // DAILY MISSION PACKS
-    // --------------------
     match /dailyMissionPacks/{docId} {
       allow read: if signedIn();
       allow write, delete: if false;
@@ -417,9 +401,6 @@ match /events/{eventId} {
       }
     }
 
-    // --------------------
-    // TELEMETRY
-    // --------------------
     match /telemetry/events/events/{eventId} {
       allow create: if signedIn();
       allow read: if isWebAdmin();
@@ -432,9 +413,6 @@ match /events/{eventId} {
       allow update, delete: if false;
     }
 
-    // --------------------
-    // GLOBAL BATTLES
-    // --------------------
     match /globalBattles/{lobbyId} {
       allow read, create, update: if signedIn();
       allow delete: if false;
@@ -466,10 +444,6 @@ match /events/{eventId} {
       }
     }
 
-    // --------------------
-    // WEBSITE ROOT
-    // Public mirrors should stay public
-    // --------------------
     match /website/{docId} {
       allow read: if true;
       allow write, delete: if false;
@@ -505,20 +479,15 @@ match /events/{eventId} {
       }
     }
 
-    // --------------------
-    // TRIAL REDEMPTIONS
-    // --------------------
     match /trialRedemptions/{redemptionId} {
       allow read: if isWebAdmin();
       allow create, update: if isWebAdmin();
       allow delete: if false;
     }
 
-    // --------------------
-    // DEFAULT DENY
-    // --------------------
     match /{document=**} {
       allow read, write: if false;
     }
   }
 }
+

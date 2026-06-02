@@ -54,8 +54,15 @@ final class AppState: ObservableObject {
         let locationType: String
         let startsAt: Date?
         let endsAt: Date?
+
+        let rsvpOpensAt: Date?
+        let rsvpClosesAt: Date?
+
+        let waitlistOpensAt: Date?
+        let waitlistClosesAt: Date?
         let capacity: Int
         let attendeeCount: Int
+        let waitlistCount: Int
         let waitlistEnabled: Bool
         let featured: Bool
         let featuredPriority: Int
@@ -132,8 +139,13 @@ final class AppState: ObservableObject {
     private var pendingCommunityCommentStatusListeners: [String: ListenerRegistration] = [:]
     private var globalBattleAdminListener: ListenerRegistration?
     private var eventRSVPListeners: [String: ListenerRegistration] = [:]
+    private var eventWaitlistListeners: [String: ListenerRegistration] = [:]
     private var didHydrateEventsOnce: Bool = false
     private var knownEventFingerprints: [String: String] = [:]
+    private var pendingEventDeepLinkID: String?
+    private var isResolvingEventDeepLink: Bool = false
+    private var lastHandledEventDeepLinkKey: String = ""
+    
     
     
     
@@ -166,7 +178,7 @@ final class AppState: ObservableObject {
 
         eventsListener = FirestoreService.db
             .collection("events")
-            .limit(to: 100)
+            .limit(to: 150)
             .addSnapshotListener { [weak self] snapshot, error in
                 guard let self else { return }
 
@@ -184,15 +196,15 @@ final class AppState: ObservableObject {
                     return
                 }
 
-                let nextEvents: [TGEvent] = documents.compactMap { doc in
+                let allEvents: [TGEvent] = documents.compactMap { doc in
                     self.makeTGEvent(from: doc)
                 }
 
-                let publicEvents = nextEvents
-                    .filter {
-                        $0.published &&
-                        $0.approvalStatus == "approved" &&
-                        $0.visibility.lowercased() == "public"
+                let visibleEvents = allEvents
+                    .filter { event in
+                        self.isPublicApprovedEvent(event)
+                        || self.canManage(event)
+                        || self.canModerate(event)
                     }
                     .sorted { lhs, rhs in
                         switch (lhs.startsAt, rhs.startsAt) {
@@ -207,23 +219,34 @@ final class AppState: ObservableObject {
                         }
                     }
 
-                self.applyEventsSnapshot(publicEvents)
-
+                self.applyEventsSnapshot(visibleEvents)
                 self.isRefreshingEvents = false
             }
     }
-    
+
+    private func isPublicApprovedEvent(_ event: TGEvent) -> Bool {
+        event.published
+        && event.approvalStatus == "approved"
+        && event.visibility.lowercased() == "public"
+    }
+
     func openEventsFromArena() {
-        isRefreshingEvents = true
         eventsErrorMessage = nil
 
-        startEventsListenerIfNeeded()
-        markEventsRead()
+        if eventsListener == nil {
+            isRefreshingEvents = true
+            startEventsListenerIfNeeded()
+        } else {
+            isRefreshingEvents = false
+        }
 
+        markEventsRead()
         setRoute(.events)
     }
-    
-    private func applyEventsSnapshot(_ publicEvents: [TGEvent]) {
+
+    private func applyEventsSnapshot(_ visibleEvents: [TGEvent]) {
+        let publicEvents = visibleEvents.filter { isPublicApprovedEvent($0) }
+
         let nextFingerprints = Dictionary(
             uniqueKeysWithValues: publicEvents.map {
                 ($0.id, eventFingerprint($0))
@@ -243,7 +266,7 @@ final class AppState: ObservableObject {
         }
 
         knownEventFingerprints = nextFingerprints
-        events = publicEvents
+        events = visibleEvents
 
         featuredEvent =
             publicEvents
@@ -252,8 +275,13 @@ final class AppState: ObservableObject {
             ?? publicEvents.first
 
         if let selectedEvent,
-           let updatedSelected = publicEvents.first(where: { $0.id == selectedEvent.id }) {
+           let updatedSelected = visibleEvents.first(where: { $0.id == selectedEvent.id }) {
             self.selectedEvent = updatedSelected
+        }
+
+        if let pendingEventDeepLinkID,
+           let pendingMatch = publicEvents.first(where: { $0.id == pendingEventDeepLinkID }) {
+            completeEventDeepLink(with: pendingMatch, source: "events_listener")
         }
     }
 
@@ -271,6 +299,7 @@ final class AppState: ObservableObject {
             event.endsAt.map { String(Int($0.timeIntervalSince1970)) } ?? "-",
             String(event.capacity),
             String(event.attendeeCount),
+            String(event.waitlistCount),
             String(event.waitlistEnabled),
             String(event.featured),
             String(event.featuredPriority),
@@ -278,8 +307,8 @@ final class AppState: ObservableObject {
         ].joined(separator: "|")
     }
 
-    private func makeTGEvent(from doc: QueryDocumentSnapshot) -> TGEvent? {
-        let data = doc.data()
+    private func makeTGEvent(from doc: DocumentSnapshot) -> TGEvent? {
+        guard let data = doc.data() else { return nil }
 
         let title =
             cleanString(data["title"])
@@ -315,6 +344,21 @@ final class AppState: ObservableObject {
             ?? intEventValue(data["rsvpCount"])
             ?? 0
 
+        let waitlistCount =
+            intEventValue(data["waitlistCount"])
+            ?? 0
+        let rsvpOpensAt =
+            eventDateValue(data["rsvpOpensAt"])
+
+        let rsvpClosesAt =
+            eventDateValue(data["rsvpClosesAt"])
+
+        let waitlistOpensAt =
+            eventDateValue(data["waitlistOpensAt"])
+
+        let waitlistClosesAt =
+            eventDateValue(data["waitlistClosesAt"])
+
         return TGEvent(
             id: doc.documentID,
             title: title,
@@ -328,8 +372,13 @@ final class AppState: ObservableObject {
             locationType: cleanString(data["locationType"]) ?? "virtual",
             startsAt: startsAt,
             endsAt: endsAt,
+            rsvpOpensAt: rsvpOpensAt,
+            rsvpClosesAt: rsvpClosesAt,
+            waitlistOpensAt: waitlistOpensAt,
+            waitlistClosesAt: waitlistClosesAt,
             capacity: intEventValue(data["capacity"]) ?? 0,
             attendeeCount: max(0, attendeeCount),
+            waitlistCount: max(0, waitlistCount),
             waitlistEnabled: data["waitlistEnabled"] as? Bool ?? false,
             featured: data["featured"] as? Bool ?? false,
             featuredPriority: intEventValue(data["featuredPriority"]) ?? 0,
@@ -418,18 +467,141 @@ final class AppState: ObservableObject {
 
     func markEventsRead() {
         hasUnreadEvents = false
+
+        let publicEvents = events.filter { isPublicApprovedEvent($0) }
+
         knownEventFingerprints = Dictionary(
-            uniqueKeysWithValues: events.map {
+            uniqueKeysWithValues: publicEvents.map {
                 ($0.id, eventFingerprint($0))
             }
         )
     }
 
     func openEvents() {
-        startEventsListenerIfNeeded()
+        if eventsListener == nil {
+            isRefreshingEvents = true
+            startEventsListenerIfNeeded()
+        } else {
+            isRefreshingEvents = false
+        }
+
         markEventsRead()
         setRoute(.events)
     }
+
+    func handleIncomingEventURL(_ url: URL) {
+        guard let eventID = extractEventID(from: url) else { return }
+        openEventDetail(eventID: eventID, source: "universal_link")
+    }
+
+    func openEventDetail(eventID: String, source: String = "direct") {
+        let cleanedID = eventID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanedID.isEmpty else { return }
+
+        let dedupeKey = "\(source)|\(cleanedID)|\(Int(Date().timeIntervalSince1970 / 2))"
+        guard lastHandledEventDeepLinkKey != dedupeKey else { return }
+        lastHandledEventDeepLinkKey = dedupeKey
+
+        pendingEventDeepLinkID = cleanedID
+        eventsErrorMessage = nil
+
+        if eventsListener == nil {
+            isRefreshingEvents = true
+            startEventsListenerIfNeeded()
+        }
+
+        if let match = events.first(where: { $0.id == cleanedID && isPublicApprovedEvent($0) }) {
+            completeEventDeepLink(with: match, source: source)
+            return
+        }
+
+        guard !isResolvingEventDeepLink else { return }
+        isResolvingEventDeepLink = true
+
+        FirestoreService.db
+            .collection("events")
+            .document(cleanedID)
+            .getDocument { [weak self] snapshot, error in
+                guard let self else { return }
+
+                Task { @MainActor in
+                    self.isResolvingEventDeepLink = false
+
+                    if let error {
+                        print("⚠️ Event deep-link load failed: \(error)")
+                        self.pendingEventDeepLinkID = nil
+                        self.showEventToast("EVENT NOT FOUND")
+                        self.setRoute(.events)
+                        return
+                    }
+
+                    guard let snapshot,
+                          snapshot.exists,
+                          let loadedEvent = self.makeTGEvent(from: snapshot),
+                          self.isPublicApprovedEvent(loadedEvent) else {
+                        self.pendingEventDeepLinkID = nil
+                        self.showEventToast("EVENT NOT FOUND")
+                        self.setRoute(.events)
+                        return
+                    }
+
+                    self.completeEventDeepLink(with: loadedEvent, source: source)
+                }
+            }
+    }
+
+    private func completeEventDeepLink(with event: TGEvent, source: String) {
+        pendingEventDeepLinkID = nil
+        selectedEvent = event
+        listenToRSVPState(for: event.id)
+        markEventsRead()
+        trackEventDeepLinkOpen(eventID: event.id, source: source)
+        setRoute(.eventDetail)
+    }
+
+    private func trackEventDeepLinkOpen(eventID: String, source: String) {
+        #if DEBUG
+        print("🔗 [Events] Opened event deep link:", eventID, "source:", source)
+        #endif
+
+        UserDefaults.standard.set(eventID, forKey: "tg.events.lastDeepLinkedEventID")
+        UserDefaults.standard.set(source, forKey: "tg.events.lastDeepLinkSource")
+        UserDefaults.standard.set(Date(), forKey: "tg.events.lastDeepLinkOpenedAt")
+    }
+
+    private func extractEventID(from url: URL) -> String? {
+        let components = url.pathComponents
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty && $0 != "/" }
+
+        if let eventsIndex = components.firstIndex(where: { $0.lowercased() == "events" }) {
+            if components.indices.contains(eventsIndex + 2),
+               components[eventsIndex + 1].lowercased() == "public" {
+                return cleanDeepLinkID(components[eventsIndex + 2])
+            }
+
+            if components.indices.contains(eventsIndex + 1) {
+                return cleanDeepLinkID(components[eventsIndex + 1])
+            }
+        }
+
+        if let eventID = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            .queryItems?
+            .first(where: { $0.name.lowercased() == "eventid" })?
+            .value {
+            return cleanDeepLinkID(eventID)
+        }
+
+        return nil
+    }
+
+    private func cleanDeepLinkID(_ value: String?) -> String? {
+        let cleaned = (value ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return cleaned.isEmpty ? nil : cleaned
+    }
+
     func showEventToast(_ message: String) {
         eventRSVPToastMessage = message
 
@@ -443,6 +615,7 @@ final class AppState: ObservableObject {
             }
         }
     }
+
     func showEventConfirmationMoment(for event: TGEvent) {
         eventConfirmationMoment = event
 
@@ -455,7 +628,7 @@ final class AppState: ObservableObject {
             }
         }
     }
-    
+
     func hasRSVPed(to event: TGEvent) -> Bool {
         RSVPedEventIDs.contains(event.id)
     }
@@ -468,6 +641,19 @@ final class AppState: ObservableObject {
         joinedEventWaitlists.contains(eventID)
     }
 
+    func isEventLive(_ event: TGEvent) -> Bool {
+        guard let startsAt = event.startsAt else { return false }
+        let endsAt = event.endsAt ?? startsAt.addingTimeInterval(2 * 60 * 60)
+        let now = Date()
+        return now >= startsAt && now <= endsAt
+    }
+
+    func hasEventEnded(_ event: TGEvent) -> Bool {
+        guard let startsAt = event.startsAt else { return false }
+        let endsAt = event.endsAt ?? startsAt.addingTimeInterval(2 * 60 * 60)
+        return Date() > endsAt
+    }
+
     func isOrganizer(of event: TGEvent) -> Bool {
         guard let uid = user?.uid else { return false }
         return event.organizerUID == uid
@@ -475,14 +661,14 @@ final class AppState: ObservableObject {
 
     func canManage(_ event: TGEvent) -> Bool {
         guard let currentUID = user?.uid else { return false }
-        return event.organizerUID == currentUID
+        return event.organizerUID == currentUID || event.submittedByUID == currentUID
     }
 
     func canEdit(_ event: TGEvent) -> Bool {
         guard canManage(event) else { return false }
 
         switch event.approvalStatus {
-        case "draft", "submitted", "rejected":
+        case "draft", "rejected":
             return true
         default:
             return false
@@ -490,11 +676,11 @@ final class AppState: ObservableObject {
     }
 
     func canMessageAttendees(_ event: TGEvent) -> Bool {
-        canManage(event)
+        canManage(event) || canModerate(event)
     }
 
     func canPublish(_ event: TGEvent) -> Bool {
-        canModerate(event)
+        canModerate(event) && event.approvalStatus == "approved" && !event.published
     }
 
     func canModerate(_ event: TGEvent) -> Bool {
@@ -540,9 +726,15 @@ final class AppState: ObservableObject {
         }
 
         let title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let summary = draft.summary.trimmingCharacters(in: .whitespacesAndNewlines)
 
         guard !title.isEmpty else {
             showEventToast("TITLE REQUIRED")
+            return
+        }
+
+        guard !summary.isEmpty else {
+            showEventToast("SUMMARY REQUIRED")
             return
         }
 
@@ -554,6 +746,13 @@ final class AppState: ObservableObject {
             organizerName: organizerName.isEmpty ? "Trivia GOAT" : organizerName
         )
 
+        payload["title"] = title
+        payload["summary"] = summary
+        payload["approvalStatus"] = "draft"
+        payload["status"] = "draft"
+        payload["published"] = false
+        payload["visibility"] = payload["visibility"] ?? "private"
+        payload["submittedByUID"] = uid
         payload["updatedAt"] = FieldValue.serverTimestamp()
 
         FirestoreService.db
@@ -576,6 +775,268 @@ final class AppState: ObservableObject {
             }
     }
 
+    func updateEventDraft(eventID: String, draft: EventDraft) {
+        guard let uid = user?.uid else {
+            showEventToast("SIGN IN REQUIRED")
+            return
+        }
+
+        let cleanedEventID = eventID.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !cleanedEventID.isEmpty else {
+            showEventToast("EVENT NOT FOUND")
+            return
+        }
+
+        guard let currentEvent = events.first(where: { $0.id == cleanedEventID }) ?? selectedEvent,
+              canManage(currentEvent) else {
+            showEventToast("NO ACCESS")
+            return
+        }
+
+        guard canEdit(currentEvent) else {
+            showEventToast("EDIT LOCKED")
+            return
+        }
+
+        let title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let heroLine = draft.heroLine.trimmingCharacters(in: .whitespacesAndNewlines)
+        let summary = draft.summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        let venueName = draft.venueName.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !title.isEmpty else {
+            showEventToast("TITLE REQUIRED")
+            return
+        }
+
+        guard !summary.isEmpty else {
+            showEventToast("SUMMARY REQUIRED")
+            return
+        }
+
+        var payload: [String: Any] = [
+            "title": title,
+            "heroLine": heroLine,
+            "summary": summary,
+            "category": draft.category.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+            "visibility": currentEvent.visibility,
+            "locationType": draft.locationType.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+            "venueName": venueName,
+            "capacity": max(0, draft.capacity),
+            "waitlistEnabled": draft.waitlistEnabled,
+            "featured": draft.featured,
+            "featuredPriority": draft.featured ? max(1, currentEvent.featuredPriority) : 0,
+            "approvalStatus": currentEvent.approvalStatus == "rejected" ? "draft" : currentEvent.approvalStatus,
+            "status": currentEvent.approvalStatus == "rejected" ? "draft" : currentEvent.status,
+            "published": currentEvent.published,
+            "submittedByUID": currentEvent.submittedByUID ?? uid,
+            "updatedAt": FieldValue.serverTimestamp()
+        ]
+
+        if let startsAt = draft.startsAt {
+            let timestamp = Timestamp(date: startsAt)
+            payload["startsAt"] = timestamp
+            payload["startAt"] = timestamp
+            payload["eventDate"] = timestamp
+        } else {
+            payload["startsAt"] = NSNull()
+            payload["startAt"] = NSNull()
+            payload["eventDate"] = NSNull()
+        }
+
+        if let endsAt = draft.endsAt {
+            let timestamp = Timestamp(date: endsAt)
+            payload["endsAt"] = timestamp
+            payload["endAt"] = timestamp
+        } else {
+            payload["endsAt"] = NSNull()
+            payload["endAt"] = NSNull()
+        }
+
+        FirestoreService.db
+            .collection("events")
+            .document(cleanedEventID)
+            .setData(payload, merge: true) { [weak self] error in
+                guard let self else { return }
+
+                Task { @MainActor in
+                    if let error {
+                        print("⚠️ Update event draft failed: \(error)")
+                        self.showEventToast("DRAFT UPDATE FAILED")
+                        return
+                    }
+
+                    self.showEventToast("DRAFT UPDATED")
+                    self.refreshEvents()
+                    self.setRoute(.creatorConsole)
+                }
+            }
+    }
+
+    func submitEventForReview(_ event: TGEvent) {
+        guard canManage(event) else {
+            showEventToast("NO ACCESS")
+            return
+        }
+
+        guard event.approvalStatus == "draft" || event.approvalStatus == "rejected" else {
+            showEventToast("ALREADY SUBMITTED")
+            return
+        }
+
+        FirestoreService.db
+            .collection("events")
+            .document(event.id)
+            .setData([
+                "approvalStatus": "submitted",
+                "status": "submitted",
+                "published": false,
+                "submittedByUID": user?.uid ?? event.submittedByUID ?? "",
+                "submittedAt": FieldValue.serverTimestamp(),
+                "updatedAt": FieldValue.serverTimestamp()
+            ], merge: true) { [weak self] error in
+                guard let self else { return }
+
+                Task { @MainActor in
+                    if let error {
+                        print("⚠️ Submit event failed: \(error)")
+                        self.showEventToast("SUBMIT FAILED")
+                        return
+                    }
+
+                    self.showEventToast("SUBMITTED FOR REVIEW")
+                    self.refreshEvents()
+                }
+            }
+    }
+
+    func approveEvent(_ event: TGEvent) {
+        guard canModerate(event) else {
+            showEventToast("ADMIN ONLY")
+            return
+        }
+
+        FirestoreService.db
+            .collection("events")
+            .document(event.id)
+            .setData([
+                "approvalStatus": "approved",
+                "status": "approved",
+                "approvedByUID": user?.uid ?? "",
+                "approvedAt": FieldValue.serverTimestamp(),
+                "rejectedReason": FieldValue.delete(),
+                "updatedAt": FieldValue.serverTimestamp()
+            ], merge: true) { [weak self] error in
+                guard let self else { return }
+
+                Task { @MainActor in
+                    if let error {
+                        print("⚠️ Approve event failed: \(error)")
+                        self.showEventToast("APPROVAL FAILED")
+                        return
+                    }
+
+                    self.showEventToast("EVENT APPROVED")
+                    self.refreshEvents()
+                }
+            }
+    }
+
+    func publishApprovedEvent(_ event: TGEvent) {
+        guard canPublish(event) else {
+            showEventToast("APPROVAL REQUIRED")
+            return
+        }
+
+        FirestoreService.db
+            .collection("events")
+            .document(event.id)
+            .setData([
+                "published": true,
+                "visibility": "public",
+                "status": "scheduled",
+                "publishedAt": FieldValue.serverTimestamp(),
+                "updatedAt": FieldValue.serverTimestamp()
+            ], merge: true) { [weak self] error in
+                guard let self else { return }
+
+                Task { @MainActor in
+                    if let error {
+                        print("⚠️ Publish event failed: \(error)")
+                        self.showEventToast("PUBLISH FAILED")
+                        return
+                    }
+
+                    self.showEventToast("EVENT PUBLISHED")
+                    self.refreshEvents()
+                }
+            }
+    }
+
+    func rejectEvent(_ event: TGEvent, reason: String = "Needs revision") {
+        guard canModerate(event) else {
+            showEventToast("ADMIN ONLY")
+            return
+        }
+
+        FirestoreService.db
+            .collection("events")
+            .document(event.id)
+            .setData([
+                "approvalStatus": "rejected",
+                "status": "rejected",
+                "published": false,
+                "rejectedReason": reason,
+                "rejectedByUID": user?.uid ?? "",
+                "rejectedAt": FieldValue.serverTimestamp(),
+                "updatedAt": FieldValue.serverTimestamp()
+            ], merge: true) { [weak self] error in
+                guard let self else { return }
+
+                Task { @MainActor in
+                    if let error {
+                        print("⚠️ Reject event failed: \(error)")
+                        self.showEventToast("REJECT FAILED")
+                        return
+                    }
+
+                    self.showEventToast("EVENT SENT BACK")
+                    self.refreshEvents()
+                }
+            }
+    }
+
+    func setEventFeatured(_ event: TGEvent, featured: Bool) {
+        guard canModerate(event) else {
+            showEventToast("ADMIN ONLY")
+            return
+        }
+
+        FirestoreService.db
+            .collection("events")
+            .document(event.id)
+            .setData([
+                "featured": featured,
+                "featuredPriority": featured ? max(1, event.featuredPriority) : 0,
+                "updatedAt": FieldValue.serverTimestamp()
+            ], merge: true) { [weak self] error in
+                guard let self else { return }
+
+                Task { @MainActor in
+                    if let error {
+                        print("⚠️ Feature event failed: \(error)")
+                        self.showEventToast("FEATURE UPDATE FAILED")
+                        return
+                    }
+
+                    self.showEventToast(featured ? "EVENT FEATURED" : "FEATURE REMOVED")
+                    self.refreshEvents()
+                }
+            }
+    }
+    
+    // MARK: - Public Event RSVP / Waitlist
+
     func RSVPToEvent(_ event: TGEvent) {
         guard let uid = user?.uid else {
             showEventToast("SIGN IN REQUIRED")
@@ -592,6 +1053,16 @@ final class AppState: ObservableObject {
             return
         }
 
+        guard !isEventLive(event) else {
+            showEventToast("EVENT ALREADY LIVE")
+            return
+        }
+
+        guard !hasEventEnded(event) else {
+            showEventToast("EVENT ENDED")
+            return
+        }
+
         let isFull = event.capacity > 0 && event.attendeeCount >= event.capacity
 
         if isFull {
@@ -600,14 +1071,13 @@ final class AppState: ObservableObject {
             } else {
                 showEventToast("EVENT FULL")
             }
-
             return
         }
 
         let cleanedName = profile.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         let displayName = cleanedName.isEmpty ? "Pilot" : cleanedName
 
-        RSVPToEventLocally(event.id)
+        RSVPedEventIDs.insert(event.id)
         locallyIncrementEventAttendance(for: event.id)
 
         let db = FirestoreService.db
@@ -653,66 +1123,11 @@ final class AppState: ObservableObject {
                     return
                 }
 
+                self.listenToRSVPState(for: event.id)
                 self.showEventToast("RSVP CONFIRMED")
                 self.showEventConfirmationMoment(for: event)
                 self.refreshEvents()
             }
-        }
-    }
-
-    private func RSVPToEventLocally(_ eventID: String) {
-        RSVPedEventIDs.insert(eventID)
-    }
-    private func locallyIncrementEventAttendance(for eventID: String) {
-        events = events.map { event in
-            guard event.id == eventID else { return event }
-
-            return TGEvent(
-                id: event.id,
-                title: event.title,
-                heroLine: event.heroLine,
-                summary: event.summary,
-                coverImageURL: event.coverImageURL,
-                status: event.status,
-                approvalStatus: event.approvalStatus,
-                visibility: event.visibility,
-                category: event.category,
-                locationType: event.locationType,
-                startsAt: event.startsAt,
-                endsAt: event.endsAt,
-                capacity: event.capacity,
-                attendeeCount: event.attendeeCount + 1,
-                waitlistEnabled: event.waitlistEnabled,
-                featured: event.featured,
-                featuredPriority: event.featuredPriority,
-                published: event.published,
-                organizerUID: event.organizerUID,
-                organizerName: event.organizerName,
-                submittedByUID: event.submittedByUID,
-                approvedByUID: event.approvedByUID,
-                approvedAt: event.approvedAt,
-                rejectedReason: event.rejectedReason,
-                createdAt: event.createdAt
-            )
-        }
-
-        featuredEvent = events
-            .sorted { $0.featuredPriority > $1.featuredPriority }
-            .first(where: { $0.featured })
-            ?? events.first
-
-        if let selectedEvent,
-           let updated = events.first(where: { $0.id == selectedEvent.id }) {
-            self.selectedEvent = updated
-        }
-    }
-    
-    private func locallyMarkEventWaitlistJoined(for eventID: String) {
-        joinedEventWaitlists.insert(eventID)
-
-        if let selectedEvent,
-           selectedEvent.id == eventID {
-            self.selectedEvent = selectedEvent
         }
     }
 
@@ -774,12 +1189,111 @@ final class AppState: ObservableObject {
                     return
                 }
 
+                self.listenToRSVPState(for: event.id)
                 self.showEventToast("WAITLIST JOINED")
                 self.refreshEvents()
             }
         }
     }
-    
+
+    private func locallyIncrementEventAttendance(for eventID: String) {
+        events = events.map { event in
+            guard event.id == eventID else { return event }
+
+            return TGEvent(
+                id: event.id,
+                title: event.title,
+                heroLine: event.heroLine,
+                summary: event.summary,
+                coverImageURL: event.coverImageURL,
+                status: event.status,
+                approvalStatus: event.approvalStatus,
+                visibility: event.visibility,
+                category: event.category,
+                locationType: event.locationType,
+                startsAt: event.startsAt,
+                endsAt: event.endsAt,
+                rsvpOpensAt: event.rsvpOpensAt,
+                rsvpClosesAt: event.rsvpClosesAt,
+                waitlistOpensAt: event.waitlistOpensAt,
+                waitlistClosesAt: event.waitlistClosesAt,
+                capacity: event.capacity,
+                attendeeCount: event.attendeeCount + 1,
+                waitlistCount: event.waitlistCount,
+                waitlistEnabled: event.waitlistEnabled,
+                featured: event.featured,
+                featuredPriority: event.featuredPriority,
+                published: event.published,
+                organizerUID: event.organizerUID,
+                organizerName: event.organizerName,
+                submittedByUID: event.submittedByUID,
+                approvedByUID: event.approvedByUID,
+                approvedAt: event.approvedAt,
+                rejectedReason: event.rejectedReason,
+                createdAt: event.createdAt
+            )
+        }
+
+        syncSelectedAndFeaturedEvent()
+    }
+
+    private func locallyMarkEventWaitlistJoined(for eventID: String) {
+        joinedEventWaitlists.insert(eventID)
+
+        events = events.map { event in
+            guard event.id == eventID else { return event }
+
+            return TGEvent(
+                id: event.id,
+                title: event.title,
+                heroLine: event.heroLine,
+                summary: event.summary,
+                coverImageURL: event.coverImageURL,
+                status: event.status,
+                approvalStatus: event.approvalStatus,
+                visibility: event.visibility,
+                category: event.category,
+                locationType: event.locationType,
+                startsAt: event.startsAt,
+                endsAt: event.endsAt,
+                rsvpOpensAt: event.rsvpOpensAt,
+                rsvpClosesAt: event.rsvpClosesAt,
+                waitlistOpensAt: event.waitlistOpensAt,
+                waitlistClosesAt: event.waitlistClosesAt,
+                capacity: event.capacity,
+                attendeeCount: event.attendeeCount,
+                waitlistCount: event.waitlistCount + 1,
+                waitlistEnabled: event.waitlistEnabled,
+                featured: event.featured,
+                featuredPriority: event.featuredPriority,
+                published: event.published,
+                organizerUID: event.organizerUID,
+                organizerName: event.organizerName,
+                submittedByUID: event.submittedByUID,
+                approvedByUID: event.approvedByUID,
+                approvedAt: event.approvedAt,
+                rejectedReason: event.rejectedReason,
+                createdAt: event.createdAt
+            )
+        }
+
+        syncSelectedAndFeaturedEvent()
+    }
+
+    private func syncSelectedAndFeaturedEvent() {
+        let publicEvents = events.filter { isPublicApprovedEvent($0) }
+
+        featuredEvent =
+            publicEvents
+                .sorted { $0.featuredPriority > $1.featuredPriority }
+                .first(where: { $0.featured })
+            ?? publicEvents.first
+
+        if let selectedEvent,
+           let updated = events.first(where: { $0.id == selectedEvent.id }) {
+            self.selectedEvent = updated
+        }
+    }
     
     // MARK: - Community Pulse
     
@@ -1085,6 +1599,11 @@ final class AppState: ObservableObject {
         communityPulseListener?.remove()
         communityPulseListener = nil
 
+        eventRSVPListeners.values.forEach { $0.remove() }
+        eventRSVPListeners.removeAll()
+
+        eventWaitlistListeners.values.forEach { $0.remove() }
+        eventWaitlistListeners.removeAll()
         communityCommentListeners.values.forEach { $0.remove() }
         communityCommentListeners.removeAll()
 
@@ -1158,6 +1677,11 @@ final class AppState: ObservableObject {
 
         eventsListener?.remove()
         eventsListener = nil
+        eventRSVPListeners.values.forEach { $0.remove() }
+        eventRSVPListeners.removeAll()
+
+        eventWaitlistListeners.values.forEach { $0.remove() }
+        eventWaitlistListeners.removeAll()
         
         // Reset local latches on sign out
         localOnboardingComplete = false
@@ -1226,6 +1750,28 @@ final class AppState: ObservableObject {
         leaderboardAutoRouteTask = nil
     }
     
+    private func installPushRouteObserverIfNeeded() {
+        NotificationCenter.default.publisher(for: .tgPushRoute)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] notification in
+                guard let self else { return }
+
+                let userInfo = notification.userInfo ?? [:]
+                let payload = userInfo["payload"] as? [AnyHashable: Any] ?? userInfo
+
+                if let eventID = payload["eventID"] as? String {
+                    self.openEventDetail(eventID: eventID)
+                    return
+                }
+
+                if let eventURLString = payload["eventURL"] as? String,
+                   let url = URL(string: eventURLString) {
+                    self.handleIncomingEventURL(url)
+                }
+            }
+            .store(in: &cancellables)
+    }
+    
     // MARK: - Boot
     
     func bootIfNeeded() {
@@ -1245,6 +1791,7 @@ final class AppState: ObservableObject {
         startCommunityPulseListenerIfNeeded()
         startEventsListenerIfNeeded()
         installPlaceholderCommunityPulseIfNeeded()
+        installPushRouteObserverIfNeeded()
         
         syncTask?.cancel()
         syncTask = Task { [weak self] in
@@ -1537,11 +2084,11 @@ final class AppState: ObservableObject {
                 // 1. Check the local latch first. If we are already complete locally,
                 //    DO NOT change the route to onboarding, regardless of what the server says.
                 if localOnboardingComplete && !localCodename.isEmpty {
-                    if !isOnGlobalBattleSurface && welcomeState == nil {
+                    if !isOnGlobalBattleSurface && route != .eventDetail && welcomeState == nil {
                         self.route = .hq
                     }
                     await syncEntitlementFromStoreKit(force: false)
-                    return // Exit early, routing is already handled by the latch
+                    return
                 }
                 
                 // 2. If no local latch, check the remote profile
@@ -1551,7 +2098,7 @@ final class AppState: ObservableObject {
                     localOnboardingComplete = true
                     localCodename = remote.displayName
                     
-                    if welcomeState == nil && !isOnGlobalBattleSurface {
+                    if welcomeState == nil && !isOnGlobalBattleSurface && route != .eventDetail {
                         route = .hq
                     }
                     await syncEntitlementFromStoreKit(force: false)
@@ -2882,38 +3429,59 @@ final class AppState: ObservableObject {
     
     
     func listenToRSVPState(for eventID: String) {
-
         guard let uid = user?.uid else { return }
 
-        if eventRSVPListeners[eventID] != nil {
-            return
-        }
+        if eventRSVPListeners[eventID] == nil {
+            let rsvpListener = FirestoreService.db
+                .collection("events")
+                .document(eventID)
+                .collection("rsvps")
+                .document(uid)
+                .addSnapshotListener { [weak self] snapshot, error in
+                    guard let self else { return }
 
-        let listener = FirestoreService.db
-            .collection("events")
-            .document(eventID)
-            .collection("rsvps")
-            .document(uid)
-            .addSnapshotListener { [weak self] snapshot, error in
+                    if let error {
+                        print("⚠️ RSVP listener failed: \(error)")
+                        return
+                    }
 
-                guard let self else { return }
-
-                if let error {
-                    print("⚠️ RSVP listener failed: \(error)")
-                    return
-                }
-
-                Task { @MainActor in
-
-                    if snapshot?.exists == true {
-                        self.RSVPedEventIDs.insert(eventID)
-                    } else {
-                        self.RSVPedEventIDs.remove(eventID)
+                    Task { @MainActor in
+                        if snapshot?.exists == true {
+                            self.RSVPedEventIDs.insert(eventID)
+                        } else {
+                            self.RSVPedEventIDs.remove(eventID)
+                        }
                     }
                 }
-            }
 
-        eventRSVPListeners[eventID] = listener
+            eventRSVPListeners[eventID] = rsvpListener
+        }
+
+        if eventWaitlistListeners[eventID] == nil {
+            let waitlistListener = FirestoreService.db
+                .collection("events")
+                .document(eventID)
+                .collection("waitlist")
+                .document(uid)
+                .addSnapshotListener { [weak self] snapshot, error in
+                    guard let self else { return }
+
+                    if let error {
+                        print("⚠️ Waitlist listener failed: \(error)")
+                        return
+                    }
+
+                    Task { @MainActor in
+                        if snapshot?.exists == true {
+                            self.joinedEventWaitlists.insert(eventID)
+                        } else {
+                            self.joinedEventWaitlists.remove(eventID)
+                        }
+                    }
+                }
+
+            eventWaitlistListeners[eventID] = waitlistListener
+        }
     }
     
     private func persistProfileNow(uid: String? = nil) async throws {

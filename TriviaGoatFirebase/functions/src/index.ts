@@ -2121,8 +2121,29 @@ function parseEventStatus(
   }
   throw new HttpsError("invalid-argument", "Invalid event status.");
 }
+      /**
+       * Parses and validates an event approval status value.
+       * @param {unknown} value - Raw approval status value.
+       * @return {string} Valid event approval status.
+       */
+      function parseEventApprovalStatus(value: unknown): string {
+        const approvalStatus = asTrimmedString(value);
 
-/**
+        switch (approvalStatus) {
+          case "draft":
+          case "submitted":
+          case "approved":
+          case "rejected":
+          case "archived":
+            return approvalStatus;
+          default:
+            throw new HttpsError(
+              "invalid-argument",
+              "Invalid event approval status."
+            );
+        }
+      }
+      /**
  * Parses event visibility.
  * @param {unknown} value - Raw visibility.
  * @return {"public" | "invite_only"} Visibility.
@@ -3420,6 +3441,7 @@ export const createLaunchEventDraft = onCall(
       heroLine,
       summary,
       status: "draft",
+      approvalStatus: "draft",
       visibility: "invite_only",
       category: "launch",
       locationType: "hybrid",
@@ -3481,22 +3503,22 @@ export const createEventDraft = onCall(
       endsAt;
     const category = parseEventCategory(data.category ?? "community");
     const locationType = parseEventLocationType(data.locationType ?? "virtual");
-    const visibility = parseEventVisibility(data.visibility ?? "public");
+    const visibility = parseEventVisibility(data.visibility ?? "private");
     const capacity = parseEventCapacity(data.capacity ?? 100);
     const waitlistEnabled = parseOptionalBoolean(data.waitlistEnabled) ?? true;
     const inviteOnly = parseOptionalBoolean(data.inviteOnly) ?? visibility === "invite_only";
-    const published = parseOptionalBoolean(data.published) ?? false;
+    const published = false;
     const featured = parseOptionalBoolean(data.featured) ?? false;
     const slug = slugify(asTrimmedString(data.slug) || title);
-
     const eventRef = db.collection("events").doc();
     await eventRef.set({
       title,
       slug,
       heroLine,
       summary,
-      status: "draft",
-      visibility,
+        status: "draft",
+        approvalStatus: "draft",
+        visibility,
       category,
       locationType,
       startsAt,
@@ -3592,8 +3614,17 @@ export const updateEventDetails = onCall(
     if ("slug" in data) patch.slug = slugify(asTrimmedString(data.slug) || asTrimmedString(data.title));
     if ("heroLine" in data) patch.heroLine = requireEventHeroLine(data.heroLine);
     if ("summary" in data) patch.summary = requireEventSummary(data.summary);
-    if ("status" in data) patch.status = parseEventStatus(data.status);
-    if ("visibility" in data) patch.visibility = parseEventVisibility(data.visibility);
+            if ("status" in data) {
+              patch.status = parseEventStatus(data.status);
+            }
+
+            if ("approvalStatus" in data) {
+              patch.approvalStatus = parseEventApprovalStatus(data.approvalStatus);
+            }
+
+            if ("visibility" in data) {
+              patch.visibility = parseEventVisibility(data.visibility);
+            }
     if ("category" in data) patch.category = parseEventCategory(data.category);
     if ("locationType" in data) patch.locationType = parseEventLocationType(data.locationType);
     if ("startsAt" in data) patch.startsAt = requireIsoDateString(data.startsAt, "startsAt");

@@ -2,6 +2,9 @@
 //  EventReminderManager.swift
 //  TriviaGoatNextGen
 //
+//  PURPOSE:
+//  EventKit calendar save/update + local notification reminder helper.
+//
 
 import Foundation
 import EventKit
@@ -12,6 +15,7 @@ final class EventReminderManager {
     static let shared = EventReminderManager()
 
     private let eventStore = EKEventStore()
+    private let eventHubBaseURL = "https://triviagoat.ca/events/public"
 
     private init() {}
 
@@ -31,7 +35,6 @@ final class EventReminderManager {
         let marker = calendarMarker(for: event)
 
         let calendarEvent = findExistingCalendarEvent(
-            event: event,
             startsAt: startsAt,
             endsAt: endsAt,
             marker: marker
@@ -41,6 +44,7 @@ final class EventReminderManager {
         calendarEvent.startDate = startsAt
         calendarEvent.endDate = endsAt
         calendarEvent.notes = calendarNotes(for: event, marker: marker)
+        calendarEvent.url = eventHubURL(for: event)
 
         if calendarEvent.calendar == nil {
             calendarEvent.calendar = eventStore.defaultCalendarForNewEvents
@@ -90,6 +94,11 @@ final class EventReminderManager {
             content.title = event.title
             content.body = reminderBody(for: event, minutesBefore: index == 0 ? 30 : 5)
             content.sound = .default
+            content.userInfo = [
+                "type": "event",
+                "eventID": event.id,
+                "eventURL": eventHubURLString(for: event)
+            ]
 
             let components = Calendar.current.dateComponents(
                 [.year, .month, .day, .hour, .minute],
@@ -162,7 +171,6 @@ final class EventReminderManager {
     }
 
     private func findExistingCalendarEvent(
-        event: AppState.TGEvent,
         startsAt: Date,
         endsAt: Date,
         marker: String
@@ -197,8 +205,8 @@ final class EventReminderManager {
         }
 
         lines.append("")
-        lines.append("Open event:")
-        lines.append("https://triviagoat.ca/events/\(event.id)")
+        lines.append("Open event hub:")
+        lines.append(eventHubURLString(for: event))
         lines.append("")
         lines.append(marker)
 
@@ -217,6 +225,15 @@ final class EventReminderManager {
             : "Your Trivia GOAT event starts in \(minutesBefore) minutes."
     }
 
+    private func eventHubURLString(for event: AppState.TGEvent) -> String {
+        let encodedID = event.id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? event.id
+        return "\(eventHubBaseURL)/\(encodedID)"
+    }
+
+    private func eventHubURL(for event: AppState.TGEvent) -> URL? {
+        URL(string: eventHubURLString(for: event))
+    }
+
     private func calendarMarker(for event: AppState.TGEvent) -> String {
         "TriviaGOATEventID:\(event.id)"
     }
@@ -233,6 +250,5 @@ enum EventReminderError: Error {
     case missingStartDate
     case calendarPermissionDenied
     case notificationPermissionDenied
-    case reminderDateInPast
     case calendarSaveFailed
 }

@@ -88,7 +88,7 @@ struct EventAttendeePreview: View {
                 )
 
                 statPill(
-                    icon: "seat.right.fill",
+                    icon: "person.2.fill",
                     text: "\(remainingSeats) LEFT"
                 )
             }

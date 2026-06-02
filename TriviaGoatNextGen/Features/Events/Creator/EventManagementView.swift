@@ -2,11 +2,9 @@
 //  EventManagementView.swift
 //  TriviaGoatNextGen
 //
-//  Created by Michael Houlder on 2026-05-15.
-//
 //  PURPOSE:
-//  Creator-facing event operations surface.
-//  WDC-style event command center foundation.
+//  Creator/Admin event command center.
+//  Draft → Submitted → Approved → Published → RSVP/Ops.
 //
 
 import SwiftUI
@@ -17,42 +15,43 @@ struct EventManagementView: View {
 
     let event: AppState.TGEvent
 
-    private var isLivePublished: Bool {
-        event.published && event.approvalStatus == "approved"
-    }
+    private var isApproved: Bool { event.approvalStatus == "approved" }
+    private var isSubmitted: Bool { event.approvalStatus == "submitted" }
+    private var isDraft: Bool { event.approvalStatus == "draft" }
+    private var isRejected: Bool { event.approvalStatus == "rejected" }
+    private var isLivePublished: Bool { event.published && isApproved }
 
     private var capacityText: String {
-        guard event.capacity > 0 else {
-            return "\(event.attendeeCount) attending"
-        }
-
-        return "\(event.attendeeCount)/\(event.capacity) attending"
+        event.capacity > 0 ? "\(event.attendeeCount)/\(event.capacity) attending" : "\(event.attendeeCount) attending"
     }
 
     private var remainingText: String {
-        guard event.capacity > 0 else {
-            return "Open capacity"
-        }
-
-        return "\(max(0, event.capacity - event.attendeeCount)) seats left"
+        event.capacity > 0 ? "\(max(0, event.capacity - event.attendeeCount)) seats left" : "Open capacity"
     }
 
     private var statusText: String {
-        isLivePublished ? "PUBLISHED" : event.approvalStatus.uppercased()
+        if isLivePublished { return "PUBLISHED" }
+        if isApproved { return "APPROVED" }
+        return event.approvalStatus.uppercased()
+    }
+
+    private var lifecycleText: String {
+        if isLivePublished { return "Public access active" }
+        if isApproved { return "Approved, ready to publish" }
+        if isSubmitted { return "Awaiting admin review" }
+        if isRejected { return "Needs revision" }
+        if isDraft { return "Draft in progress" }
+        return "Event operations"
     }
 
     private var statusColor: Color {
-        if isLivePublished { return .green }
+        if isLivePublished || isApproved { return .green }
 
         switch event.approvalStatus {
-        case "submitted":
-            return .orange
-        case "rejected":
-            return .red
-        case "draft":
-            return .white
-        default:
-            return .orange
+        case "submitted": return .orange
+        case "rejected": return .red
+        case "draft": return .white
+        default: return .orange
         }
     }
 
@@ -67,7 +66,9 @@ struct EventManagementView: View {
                     ScrollView(showsIndicators: false) {
                         VStack(spacing: 16) {
                             heroPanel
+                            lifecyclePanel
                             statusPanel
+                            adminReviewPanel
                             attendeeSnapshot
                             operationsPanel
                             wdcPanel
@@ -87,7 +88,7 @@ struct EventManagementView: View {
     }
 
     private func header(safeTop: CGFloat) -> some View {
-        HStack {
+        HStack(spacing: 12) {
             Button {
                 HapticManager.instance.impact(.light)
                 SpatialAudioManager.shared.play(.uiTap)
@@ -127,7 +128,7 @@ struct EventManagementView: View {
                     .foregroundColor(.orange.opacity(0.95))
                     .frame(width: 42, height: 42)
                     .background(Circle().fill(Color.white.opacity(0.08)))
-                    .overlay(Circle().stroke(Color.white.opacity(0.12), lineWidth: 1))
+                    .overlay(Circle().stroke(Color.orange.opacity(0.18), lineWidth: 1))
             }
             .buttonStyle(.plain)
         }
@@ -142,17 +143,11 @@ struct EventManagementView: View {
             HStack {
                 Text(statusText)
                     .font(.system(size: 10, weight: .black, design: .monospaced))
-                    .foregroundColor(isLivePublished ? .black.opacity(0.88) : .white.opacity(0.90))
+                    .foregroundColor(isLivePublished || isApproved ? .black.opacity(0.88) : .white.opacity(0.90))
                     .padding(.horizontal, 10)
                     .frame(height: 26)
-                    .background(
-                        Capsule()
-                            .fill(isLivePublished ? Color.green.opacity(0.92) : statusColor.opacity(0.18))
-                    )
-                    .overlay(
-                        Capsule()
-                            .stroke(statusColor.opacity(0.26), lineWidth: 1)
-                    )
+                    .background(Capsule().fill((isLivePublished || isApproved) ? Color.green.opacity(0.92) : statusColor.opacity(0.18)))
+                    .overlay(Capsule().stroke(statusColor.opacity(0.26), lineWidth: 1))
 
                 Text(event.visibility.uppercased())
                     .font(.system(size: 9, weight: .black, design: .monospaced))
@@ -181,8 +176,7 @@ struct EventManagementView: View {
                 .lineLimit(4)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Divider()
-                .overlay(Color.white.opacity(0.08))
+            Divider().overlay(Color.white.opacity(0.08))
 
             HStack {
                 statBlock(title: "CAPACITY", value: capacityText)
@@ -191,65 +185,145 @@ struct EventManagementView: View {
             }
         }
         .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .fill(Color.black.opacity(0.82))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .stroke(Color.orange.opacity(0.22), lineWidth: 1.2)
-        )
+        .background(RoundedRectangle(cornerRadius: 28, style: .continuous).fill(Color.black.opacity(0.82)))
+        .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous).stroke(Color.orange.opacity(0.22), lineWidth: 1.2))
     }
 
-    private func statBlock(title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(.system(size: 8, weight: .black, design: .monospaced))
-                .foregroundColor(.white.opacity(0.42))
-                .tracking(1)
-
-            Text(value.uppercased())
-                .font(.system(size: 10, weight: .black, design: .monospaced))
-                .foregroundColor(.white.opacity(0.86))
-                .lineLimit(2)
-                .minimumScaleFactor(0.70)
+    private var lifecyclePanel: some View {
+        sectionPanel(title: "EVENT LIFECYCLE", subtitle: lifecycleText) {
+            VStack(spacing: 10) {
+                lifecycleRow(title: "Creator Draft", isComplete: true)
+                lifecycleRow(title: "Submitted for Review", isComplete: isSubmitted || isApproved || isLivePublished)
+                lifecycleRow(title: "Admin Approved", isComplete: isApproved || isLivePublished)
+                lifecycleRow(title: "Public Access Live", isComplete: isLivePublished)
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func lifecycleRow(title: String, isComplete: Bool) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: isComplete ? "checkmark.circle.fill" : "circle")
+                .font(.system(size: 14, weight: .black))
+                .foregroundColor(isComplete ? .green.opacity(0.92) : .white.opacity(0.28))
+
+            Text(title.uppercased())
+                .font(.system(size: 10, weight: .black, design: .monospaced))
+                .foregroundColor(isComplete ? .white.opacity(0.84) : .white.opacity(0.42))
+                .tracking(0.8)
+
+            Spacer()
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 38)
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.black.opacity(0.30)))
     }
 
     private var statusPanel: some View {
-        sectionPanel(title: "STATUS CONTROLS", subtitle: "Publishing and operational state") {
+        sectionPanel(title: "STATUS CONTROLS", subtitle: "Creator workflow and publishing") {
             HStack(spacing: 10) {
-                controlButton(
-                    title: isLivePublished ? "LIVE" : "PUBLISH",
-                    icon: isLivePublished ? "checkmark.seal.fill" : "paperplane.fill",
-                    tint: isLivePublished ? .green : .orange
-                )
+                controlButton(title: primaryActionTitle, icon: primaryActionIcon, tint: primaryActionTint) {
+                    handlePrimaryAction()
+                }
 
                 controlButton(
                     title: event.featured ? "FEATURED" : "FEATURE",
                     icon: "star.fill",
                     tint: .orange
-                )
+                ) {
+                    app.setEventFeatured(event, featured: !event.featured)
+                }
             }
 
             HStack(spacing: 10) {
-                controlButton(
-                    title: "EDIT",
-                    icon: "square.and.pencil",
-                    tint: .white
-                )
+                controlButton(title: "EDIT", icon: "square.and.pencil", tint: .white) {
+                    guard app.canEdit(event) else {
+                        app.showEventToast("EDIT LOCKED")
+                        return
+                    }
 
-                controlButton(
-                    title: "PUBLIC VIEW",
-                    icon: "arrow.up.right.square.fill",
-                    tint: .white
-                ) {
+                    app.selectedEvent = event
+                    app.setRoute(.eventEditor)
+                }
+
+                controlButton(title: "PUBLIC VIEW", icon: "arrow.up.right.square.fill", tint: .white) {
+                    guard isLivePublished else {
+                        app.showEventToast("NOT PUBLIC YET")
+                        return
+                    }
+
                     app.selectedEvent = event
                     app.setRoute(.eventDetail)
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    private var adminReviewPanel: some View {
+        if app.canModerate(event) && isSubmitted {
+            sectionPanel(title: "ADMIN REVIEW", subtitle: "Approve or return event to creator") {
+                HStack(spacing: 10) {
+                    controlButton(title: "APPROVE", icon: "checkmark.seal.fill", tint: .green) {
+                        app.approveEvent(event)
+                    }
+
+                    controlButton(title: "REJECT", icon: "xmark.seal.fill", tint: .red) {
+                        app.rejectEvent(event)
+                    }
+                }
+            }
+        }
+    }
+
+    private var primaryActionTitle: String {
+        if isLivePublished { return "LIVE" }
+        if isApproved { return "PUBLISH" }
+        if isSubmitted { return app.canModerate(event) ? "REVIEW" : "IN REVIEW" }
+        if isRejected { return "REVISE" }
+        return "SUBMIT"
+    }
+
+    private var primaryActionIcon: String {
+        if isLivePublished { return "checkmark.seal.fill" }
+        if isApproved { return "paperplane.fill" }
+        if isSubmitted { return app.canModerate(event) ? "checkmark.seal.fill" : "hourglass" }
+        if isRejected { return "exclamationmark.triangle.fill" }
+        return "paperplane.fill"
+    }
+
+    private var primaryActionTint: Color {
+        if isLivePublished { return .green }
+        if isRejected { return .red }
+        return .orange
+    }
+
+    private func handlePrimaryAction() {
+        if isLivePublished {
+            app.showEventToast("EVENT IS LIVE")
+            return
+        }
+
+        if isApproved {
+            app.publishApprovedEvent(event)
+            return
+        }
+
+        if isSubmitted {
+            if app.canModerate(event) {
+                app.approveEvent(event)
+            } else {
+                app.showEventToast("AWAITING REVIEW")
+            }
+            return
+        }
+
+        if isRejected {
+            app.selectedEvent = event
+            app.setRoute(.eventEditor)
+            return
+        }
+
+        app.submitEventForReview(event)
     }
 
     private var attendeeSnapshot: some View {
@@ -292,6 +366,22 @@ struct EventManagementView: View {
         }
     }
 
+    private func statBlock(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.system(size: 8, weight: .black, design: .monospaced))
+                .foregroundColor(.white.opacity(0.42))
+                .tracking(1)
+
+            Text(value.uppercased())
+                .font(.system(size: 10, weight: .black, design: .monospaced))
+                .foregroundColor(.white.opacity(0.86))
+                .lineLimit(2)
+                .minimumScaleFactor(0.70)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     private func sectionPanel<Content: View>(
         title: String,
         subtitle: String? = nil,
@@ -314,14 +404,8 @@ struct EventManagementView: View {
             content()
         }
         .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(Color.white.opacity(0.045))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(Color.white.opacity(0.09), lineWidth: 1)
-        )
+        .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Color.white.opacity(0.045)))
+        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(Color.white.opacity(0.09), lineWidth: 1))
     }
 
     private func controlButton(
@@ -392,14 +476,8 @@ struct EventManagementView: View {
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
             .frame(height: 118)
-            .background(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(Color.white.opacity(0.045))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .stroke(Color.white.opacity(0.09), lineWidth: 1)
-            )
+            .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Color.white.opacity(0.045)))
+            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Color.white.opacity(0.09), lineWidth: 1))
         }
         .buttonStyle(.plain)
     }
@@ -436,10 +514,7 @@ struct EventManagementView: View {
                     .foregroundColor(.white.opacity(0.28))
             }
             .padding(12)
-            .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Color.black.opacity(0.34))
-            )
+            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.black.opacity(0.34)))
         }
         .buttonStyle(.plain)
     }
