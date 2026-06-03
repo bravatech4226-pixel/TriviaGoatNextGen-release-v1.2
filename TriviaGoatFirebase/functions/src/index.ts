@@ -15,7 +15,7 @@ import * as logger from "firebase-functions/logger";
 import { setGlobalOptions } from "firebase-functions/v2";
 import { defineSecret } from "firebase-functions/params";
 
-import { getApp, initializeApp } from "firebase-admin/app";
+import { initializeApp } from "firebase-admin/app";
 import {
   getFirestore,
   FieldValue,
@@ -36,9 +36,8 @@ import {
 
 initializeApp();
 
-const db = getFirestore(getApp(), "b4-v2-default-clone");
+const db = getFirestore("b4-v2-default-clone");
 const messaging = getMessaging();
-
 setGlobalOptions({ region: "us-central1" });
 
 /* -------------------------------------------------------------------------- */
@@ -3556,16 +3555,17 @@ export const createEventDraft = onCall(
 export const updateEventSchedule = onCall(
   async (request: CallableRequest): Promise<object> => {
     assertOwner(request);
-    const data = (request.data ?? {}) as Record<string, unknown>;
-    const eventId = asTrimmedString(data.eventId);
-    if (!eventId) {
-      throw new HttpsError("invalid-argument", "Missing eventId.");
-    }
+            const data = (request.data ?? {}) as Record<string, unknown>;
+            const eventId = asTrimmedString(data.eventId);
 
-    const patch: Record<string, unknown> = {
-      updatedAt: FieldValue.serverTimestamp(),
-      updatedBy: request.auth?.uid ?? OWNER_UID,
-    };
+            if (!eventId) {
+              throw new HttpsError("invalid-argument", "Missing eventId.");
+            }
+
+            const patch: Record<string, unknown> = {
+              updatedAt: FieldValue.serverTimestamp(),
+              updatedBy: request.auth?.uid ?? OWNER_UID,
+            };
 
     if ("startsAt" in data) patch.startsAt = requireIsoDateString(data.startsAt, "startsAt");
     if ("endsAt" in data) patch.endsAt = requireIsoDateString(data.endsAt, "endsAt");
@@ -3849,6 +3849,156 @@ export const joinEventWaitlist = onCall(
     return { success: true, eventId, status: "waiting" };
   }
 );
+
+            export const submitEventRSVP = onCall(
+              async (request: CallableRequest): Promise<object> => {
+                const uid = request.auth?.uid;
+                if (!uid) {
+                  throw new HttpsError("unauthenticated", "Auth required.");
+                }
+
+                const data = (request.data ?? {}) as Record<string, unknown>;
+                const eventId = asTrimmedString(data.eventId);
+
+                if (!eventId) {
+                  throw new HttpsError("invalid-argument", "Missing eventId.");
+                }
+
+                logger.info("submitEventRSVP debug", {
+                  eventId,
+                  databaseId: "b4-v2-default-clone",
+                  uid,
+                });
+
+                const identity = await readUserIdentity(uid);
+
+                const eventRef = db.collection("events").doc(eventId);
+                const rsvpRef = eventRef.collection("rsvps").doc(uid);
+                const waitlistRef = eventRef.collection("waitlist").doc(uid);
+                const inviteRef = eventRef.collection("invites").doc(uid);
+
+                return db.runTransaction(async (tx: Transaction) => {
+                  const [eventSnap, rsvpSnap, waitlistSnap, inviteSnap] = await Promise.all([
+                    tx.get(eventRef),
+                    tx.get(rsvpRef),
+                    tx.get(waitlistRef),
+                    tx.get(inviteRef),
+                  ]);
+
+                  if (!eventSnap.exists) {
+                    logger.warn("submitEventRSVP event missing", {
+                      eventId,
+                      databaseId: "b4-v2-default-clone",
+                      eventPath: eventRef.path,
+                      uid,
+                    });
+
+                    throw new HttpsError("not-found", "Event not found.");
+                  }
+
+                  if (rsvpSnap.exists) {
+                    return {
+                      success: true,
+                      eventId,
+                      status: "already_confirmed",
+                    };
+                  }
+
+                  const eventData = eventSnap.data() as PlatformEventDoc;
+                  const status = asTrimmedString(eventData.status).toLowerCase();
+
+                  if (status === "live") {
+                    throw new HttpsError("failed-precondition", "Event is already live.");
+                  }
+
+                  if (status === "ended" || status === "cancelled") {
+                    throw new HttpsError(
+                      "failed-precondition",
+                      "Event is no longer accepting RSVPs."
+                    );
+                  }
+
+                  const capacity =
+                    typeof eventData.capacity === "number" ? eventData.capacity : 0;
+
+                  const eventRecord = eventData as Record<string, unknown>;
+
+                  const attendeeCount = typeof eventRecord.attendeeCount === "number" ?
+                    eventRecord.attendeeCount :
+                    0;
+
+                  const isFull = capacity > 0 && attendeeCount >= capacity;
+
+                  if (isFull) {
+                    if (!eventData.waitlistEnabled) {
+                      throw new HttpsError("resource-exhausted", "Event is full.");
+                    }
+
+                    if (!waitlistSnap.exists) {
+                      tx.set(
+                        waitlistRef,
+                        {
+                          uid,
+                          email: identity.email,
+                          displayName: identity.displayName,
+                          status: "waiting",
+                          eventId,
+                          createdAt: FieldValue.serverTimestamp(),
+                          updatedAt: FieldValue.serverTimestamp(),
+                          promotedAt: null,
+                          promotedBy: null,
+                        } as PlatformEventWaitlistDoc,
+                        { merge: true }
+                      );
+                    }
+
+                    return {
+                      success: true,
+                      eventId,
+                      status: "waitlisted",
+                    };
+                  }
+
+                  tx.set(
+                    rsvpRef,
+                    {
+                      uid,
+                      email: identity.email,
+                      displayName: identity.displayName,
+                      status: "confirmed",
+                      eventId,
+                      createdAt: FieldValue.serverTimestamp(),
+                      updatedAt: FieldValue.serverTimestamp(),
+                    },
+                    { merge: true }
+                  );
+
+                  if (inviteSnap.exists) {
+                    tx.set(
+                      inviteRef,
+                      {
+                        status: "accepted",
+                        respondedAt: FieldValue.serverTimestamp(),
+                        updatedAt: FieldValue.serverTimestamp(),
+                      },
+                      { merge: true }
+                    );
+                  }
+
+                  tx.update(eventRef, {
+                    attendeeCount: FieldValue.increment(1),
+                    rsvpCount: FieldValue.increment(1),
+                    updatedAt: FieldValue.serverTimestamp(),
+                  });
+
+                  return {
+                    success: true,
+                    eventId,
+                    status: "confirmed",
+                  };
+                });
+              }
+            );
 
 /**
  * Invites a user directly to an event.

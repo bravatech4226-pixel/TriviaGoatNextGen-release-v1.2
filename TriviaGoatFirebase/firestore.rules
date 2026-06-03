@@ -307,7 +307,7 @@ match /databases/{database}/documents {
     allow delete: if false;
   }
 
-  /**
+    /**
    * Event RSVP records.
    * Clients may create or refresh only their own attendee record.
    * Event counters remain server-authoritative via Cloud Functions.
@@ -316,6 +316,16 @@ match /databases/{database}/documents {
     allow read: if true;
     allow create, update: if signedIn() && isSelf(uid);
     allow delete: if signedIn() && isSelf(uid);
+  }
+
+  /**
+   * Event RSVP records.
+   * Clients may read only their own RSVP record for UI hydration.
+   * RSVP writes are server-authoritative via Cloud Functions.
+   */
+  match /rsvps/{uid} {
+    allow read: if isWebAdmin() || isSelf(uid);
+    allow create, update, delete: if false;
   }
 }
 
