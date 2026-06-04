@@ -3804,51 +3804,96 @@ export const requestEventAccess = onCall(
  * @param {CallableRequest} request - Callable request.
  * @return {Promise<object>} Waitlist result.
  */
-export const joinEventWaitlist = onCall(
-  async (request: CallableRequest): Promise<object> => {
-    const uid = request.auth?.uid;
-    if (!uid) {
-      throw new HttpsError("unauthenticated", "Auth required.");
-    }
+            export const joinEventWaitlist = onCall(
+              async (request: CallableRequest): Promise<object> => {
+                const uid = request.auth?.uid;
+                if (!uid) {
+                  throw new HttpsError("unauthenticated", "Auth required.");
+                }
 
-    const data = (request.data ?? {}) as Record<string, unknown>;
-    const eventId = asTrimmedString(data.eventId);
-    if (!eventId) {
-      throw new HttpsError("invalid-argument", "Missing eventId.");
-    }
+                const data = (request.data ?? {}) as Record<string, unknown>;
+                const eventId = asTrimmedString(data.eventId);
+                if (!eventId) {
+                  throw new HttpsError("invalid-argument", "Missing eventId.");
+                }
 
-    const identity = await readUserIdentity(uid);
-    const waitlistRef = db.collection("events").doc(eventId).collection("waitlist").doc(uid);
-    const inviteRef = db.collection("events").doc(eventId).collection("invites").doc(uid);
+                logger.info("joinEventWaitlist debug", {
+                  eventId,
+                  databaseId: "b4-v2-default-clone",
+                  uid,
+                });
 
-    const [waitlistSnap, inviteSnap] = await Promise.all([waitlistRef.get(), inviteRef.get()]);
+                const identity = await readUserIdentity(uid);
 
-    if (inviteSnap.exists) {
-      throw new HttpsError("already-exists", "You already have an invite record for this event.");
-    }
+                const eventRef = db.collection("events").doc(eventId);
+                const waitlistRef = eventRef.collection("waitlist").doc(uid);
+                const inviteRef = eventRef.collection("invites").doc(uid);
+                const rsvpRef = eventRef.collection("rsvps").doc(uid);
 
-    if (waitlistSnap.exists) {
-      return { success: true, eventId, status: "already_waitlisted" };
-    }
+                return db.runTransaction(async (tx: Transaction) => {
+                  const [eventSnap, waitlistSnap, inviteSnap, rsvpSnap] = await Promise.all([
+                    tx.get(eventRef),
+                    tx.get(waitlistRef),
+                    tx.get(inviteRef),
+                    tx.get(rsvpRef),
+                  ]);
 
-    await waitlistRef.set(
-      {
-        uid,
-        email: identity.email,
-        displayName: identity.displayName,
-        status: "waiting",
-        eventId,
-        createdAt: FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp(),
-        promotedAt: null,
-        promotedBy: null,
-      } as PlatformEventWaitlistDoc,
-      { merge: true }
-    );
+                  if (!eventSnap.exists) {
+                    throw new HttpsError("not-found", "Event not found.");
+                  }
 
-    return { success: true, eventId, status: "waiting" };
-  }
-);
+                  if (rsvpSnap.exists) {
+                    throw new HttpsError("already-exists", "You are already registered for this event.");
+                  }
+
+                  if (inviteSnap.exists) {
+                    throw new HttpsError("already-exists", "You already have an invite record for this event.");
+                  }
+
+                  if (waitlistSnap.exists) {
+                    return { success: true, eventId, status: "already_waitlisted" };
+                  }
+
+                  const eventData = eventSnap.data() as PlatformEventDoc;
+                  const status = asTrimmedString(eventData.status).toLowerCase();
+
+                  if (status === "live") {
+                    throw new HttpsError("failed-precondition", "Event is already live.");
+                  }
+
+                  if (status === "ended" || status === "cancelled") {
+                    throw new HttpsError("failed-precondition", "Event is no longer accepting waitlist entries.");
+                  }
+
+                  if (!eventData.waitlistEnabled) {
+                    throw new HttpsError("failed-precondition", "Waitlist is not enabled for this event.");
+                  }
+
+                  tx.set(
+                    waitlistRef,
+                    {
+                      uid,
+                      email: identity.email,
+                      displayName: identity.displayName,
+                      status: "waiting",
+                      eventId,
+                      createdAt: FieldValue.serverTimestamp(),
+                      updatedAt: FieldValue.serverTimestamp(),
+                      promotedAt: null,
+                      promotedBy: null,
+                    } as PlatformEventWaitlistDoc,
+                    { merge: true }
+                  );
+
+                  tx.update(eventRef, {
+                    waitlistCount: FieldValue.increment(1),
+                    updatedAt: FieldValue.serverTimestamp(),
+                  });
+
+                  return { success: true, eventId, status: "waiting" };
+                });
+              }
+            );
 
             export const submitEventRSVP = onCall(
               async (request: CallableRequest): Promise<object> => {
