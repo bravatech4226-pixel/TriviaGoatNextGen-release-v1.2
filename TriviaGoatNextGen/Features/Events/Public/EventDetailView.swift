@@ -68,7 +68,10 @@ struct EventDetailView: View {
             .navigationBarHidden(true)
             .onAppear {
                 app.selectedEvent = currentEvent
-                app.listenToRSVPState(for: currentEvent.id)
+
+                if !isLiveNow && !hasEnded {
+                    app.listenToRSVPState(for: currentEvent.id)
+                }
 
                 withAnimation(.easeInOut(duration: 1.55).repeatForever(autoreverses: true)) {
                     pulse = true
@@ -358,7 +361,7 @@ struct EventDetailView: View {
                     title: "WAITLIST",
                     value: waitlistWindowText,
                     icon: "person.3.sequence.fill",
-                    isActive: !hasEnded && currentEvent.waitlistEnabled
+                    isActive: isWaitlistOpen
                 )
 
                 timelineRow(
@@ -749,14 +752,114 @@ struct EventDetailView: View {
         }
     }
 
+    @ViewBuilder
     private var actionDock: some View {
-        EventActionDock(
-            event: currentEvent,
-            onShare: {
-                HapticManager.instance.impact(.light)
-                SpatialAudioManager.shared.play(.uiTap)
-                showShareSheet = true
+        if hasEnded {
+            eventStateDock(
+                title: "EVENT ENDED",
+                subtitle: "Registration is closed. View the event hub for recap and follow-up details.",
+                icon: "archivebox.fill",
+                tint: .white.opacity(0.72),
+                actionTitle: "VIEW EVENT HUB",
+                actionIcon: "arrow.up.right"
+            ) {
+                openURL(eventShareURL)
             }
+        } else if isLiveNow {
+            eventStateDock(
+                title: "LIVE NOW",
+                subtitle: "RSVP is closed. Open the live event hub for current updates and access.",
+                icon: "dot.radiowaves.left.and.right",
+                tint: .orange,
+                actionTitle: "OPEN EVENT HUB",
+                actionIcon: "safari.fill"
+            ) {
+                openURL(eventShareURL)
+            }
+        } else {
+            EventActionDock(
+                event: currentEvent,
+                onShare: {
+                    HapticManager.instance.impact(.light)
+                    SpatialAudioManager.shared.play(.uiTap)
+                    showShareSheet = true
+                }
+            )
+        }
+    }
+    
+    private func eventStateDock(
+        title: String,
+        subtitle: String,
+        icon: String,
+        tint: Color,
+        actionTitle: String,
+        actionIcon: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill(tint.opacity(0.16))
+                        .frame(width: 46, height: 46)
+
+                    Image(systemName: icon)
+                        .font(.system(size: 18, weight: .black))
+                        .foregroundColor(tint)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.system(size: 13, weight: .black, design: .monospaced))
+                        .foregroundColor(.white)
+                        .tracking(1)
+
+                    Text(subtitle)
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .foregroundColor(.white.opacity(0.58))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer()
+            }
+
+            Button {
+                HapticManager.instance.impact(.medium)
+                SpatialAudioManager.shared.play(.uiTap)
+                action()
+            } label: {
+                HStack(spacing: 9) {
+                    Image(systemName: actionIcon)
+                        .font(.system(size: 12, weight: .black))
+
+                    Text(actionTitle)
+                        .font(.system(size: 12, weight: .black, design: .monospaced))
+                        .tracking(0.8)
+
+                    Spacer()
+
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 11, weight: .black))
+                }
+                .foregroundColor(.black)
+                .padding(.horizontal, 16)
+                .frame(height: 48)
+                .background(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(tint.opacity(0.96))
+                )
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .fill(Color.black.opacity(0.74))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .stroke(tint.opacity(0.24), lineWidth: 1)
         )
     }
 
@@ -803,13 +906,23 @@ struct EventDetailView: View {
     private var isWaitlisted: Bool {
         app.hasJoinedWaitlist(currentEvent.id)
     }
+    
+    private var isWaitlistOpen: Bool {
+        app.isWaitlistWindowOpen(for: currentEvent)
+    }
 
     private var heroCopy: String {
         let hero = currentEvent.heroLine.trimmingCharacters(in: .whitespacesAndNewlines)
         if !hero.isEmpty { return hero }
         return currentEvent.summary.trimmingCharacters(in: .whitespacesAndNewlines)
     }
-
+    
+    private var normalizedStatus: String {
+        currentEvent.status
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+    }
+    
     private var headerSubtitle: String {
         if isLiveNow { return "LIVE NOW" }
         if hasEnded { return "EVENT ARCHIVE" }
@@ -946,7 +1059,7 @@ struct EventDetailView: View {
     private var accessText: String {
         if hasEnded { return "ARCHIVE" }
         if isLiveNow { return "LIVE" }
-        if isFull { return currentEvent.waitlistEnabled ? "WAITLIST" : "FULL" }
+        if isFull { return isWaitlistOpen ? "WAITLIST" : "FULL" }
         return currentEvent.locationType.uppercased()
     }
 
@@ -956,7 +1069,7 @@ struct EventDetailView: View {
         if isWaitlisted { return "WAITLISTED" }
         if hasEnded { return "ARCHIVED" }
         if isLiveNow { return "LIVE" }
-        if isFull { return currentEvent.waitlistEnabled ? "WAITLIST" : "FULL" }
+        if isFull { return isWaitlistOpen ? "WAITLIST" : "FULL" }
         if currentEvent.published { return "OPEN RSVP" }
         return currentEvent.approvalStatus.uppercased()
     }
@@ -996,12 +1109,20 @@ struct EventDetailView: View {
     }
 
     private var isLiveNow: Bool {
+        if normalizedStatus == "live" {
+            return true
+        }
+
         guard let startsAt = currentEvent.startsAt else { return false }
         let endsAt = currentEvent.endsAt ?? startsAt.addingTimeInterval(2 * 60 * 60)
         return now >= startsAt && now <= endsAt
     }
 
     private var hasEnded: Bool {
+        if normalizedStatus == "ended" || normalizedStatus == "cancelled" {
+            return true
+        }
+
         guard let startsAt = currentEvent.startsAt else { return false }
         let endsAt = currentEvent.endsAt ?? startsAt.addingTimeInterval(2 * 60 * 60)
         return now > endsAt

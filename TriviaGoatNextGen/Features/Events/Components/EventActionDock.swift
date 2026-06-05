@@ -409,6 +409,30 @@ struct EventActionDock: View {
         app.hasJoinedWaitlist(syncedEvent.id)
 
     }
+    
+    private var isJoiningWaitlist: Bool {
+
+        app.isJoiningWaitlist(syncedEvent.id)
+
+    }
+    
+    private var isWaitlistOpen: Bool {
+
+        app.isWaitlistWindowOpen(for: syncedEvent)
+
+    }
+    
+    private var isRSVPOpen: Bool {
+
+        app.isRSVPWindowOpen(for: syncedEvent)
+
+    }
+
+    private var shouldOfferWaitlist: Bool {
+
+        isWaitlistOpen && (!isRSVPOpen || isFull)
+
+    }
 
     private var isFull: Bool {
 
@@ -453,6 +477,8 @@ struct EventActionDock: View {
         if isOrganizer { return "HOST COMMAND" }
 
         if hasRSVPed { return "ACCESS CONFIRMED" }
+        
+        if isJoiningWaitlist { return "WAITLIST JOINING" }
 
         if hasWaitlisted { return "WAITLIST ACTIVE" }
 
@@ -469,12 +495,14 @@ struct EventActionDock: View {
         if isOrganizer { return "You are hosting this event." }
 
         if hasRSVPed { return "You’re locked in. Add it to calendar or share the event." }
+        
+        if isJoiningWaitlist { return "Securing your waitlist position..." }
 
         if hasWaitlisted { return "You’re on the waitlist. Watch for updates." }
 
         if hasEnded { return "This event has completed." }
 
-        if isFull && syncedEvent.waitlistEnabled {
+        if shouldOfferWaitlist {
 
             return "\(syncedEvent.waitlistCount) waiting — waitlist access is available."
 
@@ -526,9 +554,9 @@ struct EventActionDock: View {
 
         if isLiveNow { return "Live event access is currently active." }
 
-        if isFull && syncedEvent.waitlistEnabled {
+        if shouldOfferWaitlist {
 
-            return "Event is full — waitlist access is available."
+            return "Waitlist access is available."
 
         }
 
@@ -569,12 +597,14 @@ struct EventActionDock: View {
         || hasRSVPed
 
         || hasWaitlisted
+        
+        || isJoiningWaitlist
 
         || hasEnded
 
         || isLiveNow
 
-        || (isFull && !syncedEvent.waitlistEnabled)
+        || (isFull && !shouldOfferWaitlist)
 
     }
 
@@ -587,10 +617,12 @@ struct EventActionDock: View {
         if hasRSVPed { return "REGISTERED" }
 
         if hasWaitlisted { return "WAITLISTED" }
+        
+        if isJoiningWaitlist { return "JOINING..." }
 
         if isLiveNow { return "EVENT LIVE" }
 
-        if isFull && syncedEvent.waitlistEnabled {
+        if shouldOfferWaitlist {
 
             return syncedEvent.waitlistCount > 0
 
@@ -618,7 +650,8 @@ struct EventActionDock: View {
 
         if isLiveNow { return "dot.radiowaves.left.and.right" }
 
-        if isFull && syncedEvent.waitlistEnabled { return "person.crop.circle.badge.plus" }
+        if shouldOfferWaitlist
+        { return "person.crop.circle.badge.plus" }
 
         if isFull { return "lock.fill" }
 
@@ -724,12 +757,9 @@ struct EventActionDock: View {
 
         if isLiveNow { return "LIVE" }
 
-        if isFull {
+        if shouldOfferWaitlist { return "WAITLIST" }
 
-            return syncedEvent.waitlistEnabled ? "WAITLIST" : "FULL"
-
-        }
-
+        if isFull { return "FULL" }
         return "OPEN"
 
     }
@@ -832,18 +862,23 @@ struct EventActionDock: View {
 
         }
 
+        if shouldOfferWaitlist {
+
+            app.joinEventWaitlist(currentEvent)
+            return
+
+        }
+
         if isFull {
 
-            if currentEvent.waitlistEnabled {
+            app.showEventToast("EVENT FULL")
+            return
 
-                app.joinEventWaitlist(currentEvent)
+        }
 
-            } else {
+        if !isRSVPOpen {
 
-                app.showEventToast("EVENT FULL")
-
-            }
-
+            app.showEventToast("RSVP CLOSED")
             return
 
         }

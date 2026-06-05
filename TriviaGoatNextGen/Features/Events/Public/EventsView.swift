@@ -31,7 +31,7 @@ struct EventsView: View {
             .filter { event in
                 event.published &&
                 event.approvalStatus == "approved" &&
-                event.visibility == "public"
+                event.visibility.lowercased() == "public"
             }
             .sorted { lhs, rhs in
                 let lhsEnded = isEnded(lhs)
@@ -605,6 +605,14 @@ struct EventsView: View {
     }
 
     private func isLive(_ event: AppState.TGEvent) -> Bool {
+        let status = event.status
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+
+        if status == "live" {
+            return true
+        }
+
         guard let startsAt = event.startsAt else {
             return false
         }
@@ -615,6 +623,14 @@ struct EventsView: View {
     }
 
     private func isEnded(_ event: AppState.TGEvent) -> Bool {
+        let status = event.status
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+
+        if status == "ended" || status == "cancelled" {
+            return true
+        }
+
         guard let startsAt = event.startsAt else {
             return false
         }

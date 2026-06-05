@@ -582,10 +582,15 @@ struct EventEditorView: View {
             isComplete: isComplete,
             icon: icon,
             picker: AnyView(
-                DatePicker("", selection: selection, in: range, displayedComponents: [.date, .hourAndMinute])
-                    .labelsHidden()
-                    .datePickerStyle(.compact)
-                    .tint(.orange)
+                DatePicker(
+                    "",
+                    selection: selection,
+                    in: range,
+                    displayedComponents: [.date, .hourAndMinute]
+                )
+                .labelsHidden()
+                .datePickerStyle(.compact)
+                .tint(.orange)
             )
         )
     }
@@ -604,10 +609,15 @@ struct EventEditorView: View {
             isComplete: isComplete,
             icon: icon,
             picker: AnyView(
-                DatePicker("", selection: selection, in: closedRange, displayedComponents: [.date, .hourAndMinute])
-                    .labelsHidden()
-                    .datePickerStyle(.compact)
-                    .tint(.orange)
+                DatePicker(
+                    "",
+                    selection: selection,
+                    in: closedRange,
+                    displayedComponents: [.date, .hourAndMinute]
+                )
+                .labelsHidden()
+                .datePickerStyle(.compact)
+                .tint(.orange)
             )
         )
     }
