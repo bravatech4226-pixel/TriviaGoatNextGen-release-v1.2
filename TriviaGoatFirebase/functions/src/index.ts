@@ -345,13 +345,36 @@ type PlatformEventInviteDoc = {
   email: string;
   displayName: string;
   status: "invited" | "accepted" | "declined" | "approved";
-  inviteSource: "admin" | "request_access" | "waitlist_promotion";
+  inviteSource: "admin" | "request_access" | "waitlist_promotion" | "event_crm";
   eventId: string;
   invitedBy: string;
   invitedAt?: FieldValue;
   respondedAt?: FieldValue | null;
   updatedAt?: FieldValue;
 };
+
+
+type PlatformEventGuestDoc = {
+  eventId: string;
+  name: string;
+  email: string;
+  role: string;
+  organization?: string;
+  notes?: string;
+  isVIP?: boolean;
+  invitationStatus: "staged" | "invited" | "accepted" | "declined" | "checked_in";
+  invitationTokenHash?: string | null;
+  invitationTokenCreatedAt?: string | null;
+  invitationExpiresAt?: string | null;
+  invitedAt?: FieldValue | null;
+  acceptedAt?: FieldValue | null;
+  declinedAt?: FieldValue | null;
+  source?: "contacts" | "manual" | "import";
+  invitedBy?: string;
+  createdAt?: FieldValue;
+  updatedAt?: FieldValue;
+};
+
 
 type PlatformEventAccessRequestDoc = {
   uid: string;
@@ -1240,6 +1263,164 @@ function buildEventAccessVerificationEmailHtml(
       }
 
 /**
+ * Builds the event invitation response URL.
+ * @param {string} eventId - Event ID.
+ * @param {string} guestId - Guest document ID.
+ * @param {string} email - Guest email.
+ * @param {string} token - Raw invite token.
+ * @return {string} Absolute invitation URL.
+ */
+function buildEventInvitationUrl(
+  eventId: string,
+  guestId: string,
+  email: string,
+  token: string
+): string {
+  return (
+    `${getEventVerificationBaseUrl()}/events/invite` +
+    `?eventId=${encodeURIComponent(eventId)}` +
+    `&guestId=${encodeURIComponent(guestId)}` +
+    `&email=${encodeURIComponent(email.trim().toLowerCase())}` +
+    `&token=${encodeURIComponent(token)}`
+  );
+}
+
+/**
+ * Normalizes an event person role.
+ * @param {unknown} value - Raw role.
+ * @return {string} Safe role.
+ */
+function normalizeEventPersonRole(value: unknown): string {
+  const cleaned = asTrimmedString(value).slice(0, 48);
+  return cleaned || "Attendee";
+}
+
+/**
+ * Builds event invitation email HTML.
+ * @param {string} displayName - Recipient display name.
+ * @param {string} eventTitle - Event title.
+ * @param {string} role - Event role.
+ * @param {string} organization - Organization.
+ * @param {string} inviteUrl - Invite URL.
+ * @return {string} HTML body.
+ */
+function buildEventInvitationEmailHtml(
+  displayName: string,
+  eventTitle: string,
+  role: string,
+  organization: string,
+  inviteUrl: string
+): string {
+  const safeName = escapeHtml(displayName || "there");
+  const safeEventTitle = escapeHtml(eventTitle);
+  const safeRole = escapeHtml(role || "Guest");
+  const safeOrganization = escapeHtml(organization);
+  const safeInviteUrl = escapeHtml(inviteUrl);
+  const organizationLine = safeOrganization ?
+    `<p><strong>Organization:</strong> ${safeOrganization}</p>` :
+    "";
+
+  return `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #111827; max-width: 600px; margin: 0 auto;">
+      <h2 style="color: #000000; font-size: 24px; font-weight: 800; margin-bottom: 16px;">
+        You're invited to ${safeEventTitle}
+      </h2>
+
+      <p>Hi ${safeName},</p>
+      <p>You have been invited to <strong>${safeEventTitle}</strong>.</p>
+      <p><strong>Role:</strong> ${safeRole}</p>
+      ${organizationLine}
+
+      <div style="margin: 32px 0;">
+        <a
+          href="${safeInviteUrl}"
+          style="display: inline-block; padding: 14px 28px; background-color: #f97316; color: #000000; text-decoration: none; border-radius: 12px; font-weight: 800; font-size: 14px; text-transform: uppercase; letter-spacing: 0.05em;"
+        >
+          Respond to Invite
+        </a>
+      </div>
+
+      <p style="font-size: 13px; color: #6b7280;">
+        If the button doesn't work, copy and paste this link into your browser:
+      </p>
+
+      <p style="font-size: 13px; word-break: break-all; color: #f97316;">
+        ${safeInviteUrl}
+      </p>
+
+      <hr style="border: 0; border-top: 1px solid #e5e7eb; margin: 32px 0;" />
+
+      <p style="font-size: 12px; color: #9ca3af;">
+        This secure invitation link expires in 14 days.
+      </p>
+    </div>
+  `.trim();
+}
+
+/**
+ * Sends an event invitation email.
+ * @param {string} toEmail - Recipient email.
+ * @param {string} displayName - Recipient display name.
+ * @param {string} eventTitle - Event title.
+ * @param {string} role - Event role.
+ * @param {string} organization - Organization.
+ * @param {string} inviteUrl - Invite URL.
+ * @return {Promise<void>} Completion promise.
+ */
+async function sendEventInvitationEmail(
+  toEmail: string,
+  displayName: string,
+  eventTitle: string,
+  role: string,
+  organization: string,
+  inviteUrl: string
+): Promise<void> {
+  const resend = new Resend(RESEND_API_KEY.value());
+
+  try {
+      const emailResult = await resend.emails.send({
+      from: RESEND_FROM_EMAIL.value(),
+      to: [toEmail],
+      subject: `You're invited to ${eventTitle}`,
+      html: buildEventInvitationEmailHtml(
+        displayName,
+        eventTitle,
+        role,
+        organization,
+        inviteUrl
+      ),
+      text:
+        `You're invited to ${eventTitle}.\n\n` +
+        `Role: ${role}\n` +
+        (organization ? `Organization: ${organization}\n` : "") +
+        `\nRespond to your invitation here:\n${inviteUrl}\n\n` +
+        "This secure invitation link expires in 14 days.",
+    });
+logger.info("Event invitation email accepted by Resend", {
+  toEmail,
+  eventTitle,
+  resendResult: emailResult,
+});
+  } catch (error) {
+    logger.error("Event invitation email failed", {
+      error: String(error),
+      toEmail,
+      eventTitle,
+    });
+    throw new HttpsError("internal", "Failed to send event invitation email.");
+  }
+}
+
+/**
+ * Builds deterministic event guest document ID from email.
+ * @param {string} email - Email.
+ * @return {string} Guest document ID.
+ */
+function makeEventGuestId(email: string): string {
+  return `guest_${hashToken(email.trim().toLowerCase()).slice(0, 32)}`;
+}
+
+/**
  * Cleans public username fallback.
  * @param {unknown} value - Existing username-ish value.
  * @param {string} fallbackDisplayName - Fallback display name.
@@ -1868,14 +2049,14 @@ function assertOwner(request: CallableRequest): void {
  * @return {Promise<void>} Completion promise.
  */
 async function rebuildPublicPlatformStats(): Promise<void> {
-  const [usersSnap, postsSnap, approvedPostsSnap, eventsSnap, globalBattlesSnap] =
-    await Promise.all([
-      db.collection("users").get(),
-      db.collection("posts").get(),
-      db.collection("posts").where("status", "==", "approved").get(),
-      db.collection("events").get(),
-      db.collection("globalBattles").get(),
-    ]);
+    const [usersSnap, postsSnap, approvedPostsSnap, eventsSnap, globalBattlesSnap] =
+      await Promise.all([
+        db.collection("users").get(),
+        db.collection("posts").get(),
+        db.collection("posts").where("status", "==", "approved").get(),
+        db.collection("events").get(),
+        db.collection("globalBattles").get(),
+      ]);
 
   const stats: PublicStatsDoc = {
     totalUsers: usersSnap.size,
@@ -2147,14 +2328,27 @@ function parseEventStatus(
  * @param {unknown} value - Raw visibility.
  * @return {"public" | "invite_only"} Visibility.
  */
-function parseEventVisibility(value: unknown): "public" | "invite_only" {
-  const normalized = asTrimmedString(value).toLowerCase();
-  if (normalized === "public" || normalized === "invite_only") {
-    return normalized;
-  }
-  throw new HttpsError("invalid-argument", "Invalid event visibility.");
-}
+    function parseEventVisibility(value: unknown): "public" | "invite_only" {
+      const normalized = asTrimmedString(value).toLowerCase();
 
+      if (normalized === "public") {
+        return "public";
+      }
+
+      if (
+        normalized === "invite_only" ||
+        normalized === "invite-only" ||
+        normalized === "inviteonly" ||
+        normalized === "private"
+      ) {
+        return "invite_only";
+      }
+
+      throw new HttpsError(
+        "invalid-argument",
+        `Invalid event visibility: ${String(value)}`
+      );
+    }
 /**
  * Parses event category.
  * @param {unknown} value - Raw category.
@@ -3502,10 +3696,12 @@ export const createEventDraft = onCall(
       endsAt;
     const category = parseEventCategory(data.category ?? "community");
     const locationType = parseEventLocationType(data.locationType ?? "virtual");
-    const visibility = parseEventVisibility(data.visibility ?? "private");
+    const visibility = parseEventVisibility(data.visibility ?? "public");
     const capacity = parseEventCapacity(data.capacity ?? 100);
     const waitlistEnabled = parseOptionalBoolean(data.waitlistEnabled) ?? true;
-    const inviteOnly = parseOptionalBoolean(data.inviteOnly) ?? visibility === "invite_only";
+            const inviteOnly =
+              parseOptionalBoolean(data.inviteOnly) ??
+              visibility === "invite_only";
     const published = false;
     const featured = parseOptionalBoolean(data.featured) ?? false;
     const slug = slugify(asTrimmedString(data.slug) || title);
@@ -4044,6 +4240,271 @@ export const requestEventAccess = onCall(
                 });
               }
             );
+
+
+/**
+ * Sends staged event invitations and creates Event CRM guest records.
+ * @param {CallableRequest} request - Callable request.
+ * @return {Promise<object>} Send result.
+ */
+export const sendEventInvitations = onCall(
+  { secrets: [RESEND_API_KEY, RESEND_FROM_EMAIL] },
+  async (request: CallableRequest): Promise<object> => {
+    const data = (request.data ?? {}) as Record<string, unknown>;
+    const eventId = asTrimmedString(data.eventId);
+    const inviteesRaw = data.invitees;
+
+    if (!eventId) {
+      throw new HttpsError("invalid-argument", "Missing eventId.");
+    }
+
+    if (!Array.isArray(inviteesRaw) || inviteesRaw.length === 0) {
+      throw new HttpsError("invalid-argument", "Missing invitees.");
+    }
+
+    if (inviteesRaw.length > 100) {
+      throw new HttpsError("invalid-argument", "Invite batch limit is 100.");
+    }
+
+    const eventRef = db.collection("events").doc(eventId);
+    const eventSnap = await eventRef.get();
+
+    if (!eventSnap.exists) {
+      throw new HttpsError("not-found", "Event not found.");
+    }
+
+      const eventData = eventSnap.data() as PlatformEventDoc | undefined;
+      const eventTitle = asTrimmedString(eventData?.title) || "Trivia GOAT Event";
+      const invitedBy = request.auth?.uid ?? "";
+
+      if (!invitedBy) {
+        throw new HttpsError("unauthenticated", "Sign in required.");
+      }
+
+      const rawEventData = eventSnap.data() ?? {};
+      const requesterEmail = asTrimmedString(request.auth?.token?.email).toLowerCase();
+
+      const createdBy = asTrimmedString(rawEventData.createdBy);
+      const organizerUID = asTrimmedString(rawEventData.organizerUID);
+      const organizerUid = asTrimmedString(rawEventData.organizerUid);
+      const submittedByUID = asTrimmedString(rawEventData.submittedByUID);
+      const submittedByUid = asTrimmedString(rawEventData.submittedByUid);
+      const updatedBy = asTrimmedString(rawEventData.updatedBy);
+
+      const canManageInviteFlow =
+        invitedBy === OWNER_UID ||
+        requesterEmail === "bravatech4226@gmail.com" ||
+        invitedBy === createdBy ||
+        invitedBy === organizerUID ||
+        invitedBy === organizerUid ||
+        invitedBy === submittedByUID ||
+        invitedBy === submittedByUid ||
+        invitedBy === updatedBy;
+
+      if (!canManageInviteFlow) {
+        logger.warn("sendEventInvitations denied", {
+          eventId,
+          invitedBy,
+          requesterEmail,
+          createdBy,
+          organizerUID,
+          submittedByUID,
+          updatedBy,
+          databaseId: "b4-v2-default-clone",
+        });
+
+        throw new HttpsError("permission-denied", "Event manager access required.");
+      }
+
+    const normalizedInvitees = inviteesRaw
+      .filter(isRecord)
+      .map((invitee: Record<string, unknown>) => {
+        const sourceRaw = asTrimmedString(invitee.source).toLowerCase();
+        const source = sourceRaw === "contacts" || sourceRaw === "import" ? sourceRaw : "manual";
+        const email = asTrimmedString(invitee.email).toLowerCase();
+        const name = cleanDisplayName(invitee.name || email.split("@")[0]);
+
+        return {
+          name,
+          email,
+          role: normalizeEventPersonRole(invitee.role),
+          organization: asTrimmedString(invitee.organization).slice(0, 120),
+          notes: asTrimmedString(invitee.notes).slice(0, 500),
+          isVIP: parseOptionalBoolean(invitee.isVIP) ?? false,
+          source,
+        };
+      })
+      .filter((invitee) => invitee.email && isValidEmail(invitee.email));
+
+    const uniqueInvitees = Array.from(
+      new Map(normalizedInvitees.map((invitee) => [invitee.email, invitee])).values()
+    );
+
+    if (uniqueInvitees.length === 0) {
+      throw new HttpsError("invalid-argument", "No valid invitee emails were provided.");
+    }
+
+    const emailsSent: string[] = [];
+    const batch = db.batch();
+
+    for (const invitee of uniqueInvitees) {
+      const guestId = makeEventGuestId(invitee.email);
+      const syntheticUid = `guest_${hashToken(`${eventId}:${invitee.email}`).slice(0, 32)}`;
+      const token = createVerificationToken();
+      const tokenHash = hashToken(token);
+      const inviteUrl = buildEventInvitationUrl(eventId, guestId, invitee.email, token);
+      const guestRef = eventRef.collection("guests").doc(guestId);
+      const inviteRef = eventRef.collection("invites").doc(syntheticUid);
+
+      batch.set(
+        guestRef,
+        {
+          eventId,
+          name: invitee.name,
+          email: invitee.email,
+          role: invitee.role,
+          organization: invitee.organization,
+          notes: invitee.notes,
+          isVIP: invitee.isVIP,
+          invitationStatus: "invited",
+          invitationTokenHash: tokenHash,
+          invitationTokenCreatedAt: new Date().toISOString(),
+          invitationExpiresAt: buildFutureIso(24 * 14),
+          invitedAt: FieldValue.serverTimestamp(),
+          acceptedAt: null,
+          declinedAt: null,
+          source: invitee.source,
+          invitedBy,
+          createdAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+        } as PlatformEventGuestDoc,
+        { merge: true }
+      );
+
+      batch.set(
+        inviteRef,
+        {
+          uid: syntheticUid,
+          email: invitee.email,
+          displayName: invitee.name,
+          status: "invited",
+          inviteSource: "event_crm",
+          eventId,
+          invitedBy,
+          invitedAt: FieldValue.serverTimestamp(),
+          respondedAt: null,
+          updatedAt: FieldValue.serverTimestamp(),
+        } as PlatformEventInviteDoc,
+        { merge: true }
+      );
+
+      await sendEventInvitationEmail(
+        invitee.email,
+        invitee.name,
+        eventTitle,
+        invitee.role,
+        invitee.organization,
+        inviteUrl
+      );
+
+      emailsSent.push(invitee.email);
+    }
+
+    await batch.commit();
+
+    logger.info("sendEventInvitations complete", {
+      eventId,
+      databaseId: "b4-v2-default-clone",
+      count: emailsSent.length,
+    });
+
+    return {
+      success: true,
+      eventId,
+      status: "sent",
+      sentCount: emailsSent.length,
+      emails: emailsSent,
+    };
+  }
+);
+
+/**
+ * Accepts or declines an Event CRM invitation using a secure token.
+ * @param {CallableRequest} request - Callable request.
+ * @return {Promise<object>} Response result.
+ */
+export const respondToEventInvitation = onCall(
+  async (request: CallableRequest): Promise<object> => {
+    const data = (request.data ?? {}) as Record<string, unknown>;
+    const eventId = asTrimmedString(data.eventId);
+    const guestId = asTrimmedString(data.guestId);
+    const token = asTrimmedString(data.token);
+    const response = asTrimmedString(data.response).toLowerCase();
+
+    if (!eventId) {
+      throw new HttpsError("invalid-argument", "Missing eventId.");
+    }
+    if (!guestId) {
+      throw new HttpsError("invalid-argument", "Missing guestId.");
+    }
+    if (!token) {
+      throw new HttpsError("invalid-argument", "Missing token.");
+    }
+    if (response !== "accepted" && response !== "declined") {
+      throw new HttpsError("invalid-argument", "Invalid invitation response.");
+    }
+
+    const eventRef = db.collection("events").doc(eventId);
+    const guestRef = eventRef.collection("guests").doc(guestId);
+    const guestSnap = await guestRef.get();
+
+    if (!guestSnap.exists) {
+      throw new HttpsError("not-found", "Invitation not found.");
+    }
+
+    const guestData = guestSnap.data() as PlatformEventGuestDoc | undefined;
+    const expiresAt = asTrimmedString(guestData?.invitationExpiresAt);
+
+    if (!guestData?.invitationTokenHash) {
+      throw new HttpsError("failed-precondition", "Invitation token is no longer active.");
+    }
+
+    if (expiresAt && new Date(expiresAt).getTime() < Date.now()) {
+      throw new HttpsError("deadline-exceeded", "Invitation has expired.");
+    }
+
+    if (hashToken(token) !== guestData.invitationTokenHash) {
+      throw new HttpsError("permission-denied", "Invalid invitation token.");
+    }
+
+    const syntheticUid = `guest_${hashToken(`${eventId}:${guestData.email}`).slice(0, 32)}`;
+    const inviteRef = eventRef.collection("invites").doc(syntheticUid);
+    const statusPatch = response === "accepted" ?
+      { invitationStatus: "accepted", acceptedAt: FieldValue.serverTimestamp() } :
+      { invitationStatus: "declined", declinedAt: FieldValue.serverTimestamp() };
+
+    await Promise.all([
+      guestRef.set(
+        {
+          ...statusPatch,
+          invitationTokenHash: null,
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      ),
+      inviteRef.set(
+        {
+          status: response,
+          respondedAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      ),
+    ]);
+
+    return { success: true, eventId, guestId, status: response };
+  }
+);
 
 /**
  * Invites a user directly to an event.

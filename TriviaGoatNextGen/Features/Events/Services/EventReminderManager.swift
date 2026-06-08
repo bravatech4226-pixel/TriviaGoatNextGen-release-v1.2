@@ -55,14 +55,20 @@ final class EventReminderManager {
         }
 
         calendarEvent.alarms = nil
-        calendarEvent.addAlarm(EKAlarm(relativeOffset: -30 * 60))
-        calendarEvent.addAlarm(EKAlarm(relativeOffset: -5 * 60))
+
+        addCalendarAlarmIfFuture(to: calendarEvent, startsAt: startsAt, offset: -24 * 60 * 60)
+        addCalendarAlarmIfFuture(to: calendarEvent, startsAt: startsAt, offset: -60 * 60)
+        addCalendarAlarmIfFuture(to: calendarEvent, startsAt: startsAt, offset: -5 * 60)
 
         try eventStore.save(calendarEvent, span: .thisEvent, commit: true)
 
         guard let eventIdentifier = calendarEvent.eventIdentifier else {
             throw EventReminderError.calendarSaveFailed
         }
+
+        #if DEBUG
+        print("📅 [EventReminderManager] Calendar saved:", event.id, eventIdentifier)
+        #endif
 
         return eventIdentifier
     }
@@ -77,9 +83,11 @@ final class EventReminderManager {
             throw EventReminderError.notificationPermissionDenied
         }
 
-        let reminderDates = [
-            startsAt.addingTimeInterval(-30 * 60),
-            startsAt.addingTimeInterval(-5 * 60)
+        let reminders: [(id: String, fireDate: Date, minutesBefore: Int)] = [
+            ("24h", startsAt.addingTimeInterval(-24 * 60 * 60), 24 * 60),
+            ("1h", startsAt.addingTimeInterval(-60 * 60), 60),
+            ("5m", startsAt.addingTimeInterval(-5 * 60), 5),
+            ("live", startsAt, 0)
         ]
 
         let identifiers = reminderIdentifiers(for: event)
@@ -87,12 +95,14 @@ final class EventReminderManager {
         UNUserNotificationCenter.current()
             .removePendingNotificationRequests(withIdentifiers: identifiers)
 
-        for (index, reminderDate) in reminderDates.enumerated() {
-            guard reminderDate > Date() else { continue }
+        var scheduledCount = 0
+
+        for reminder in reminders {
+            guard reminder.fireDate > Date() else { continue }
 
             let content = UNMutableNotificationContent()
             content.title = event.title
-            content.body = reminderBody(for: event, minutesBefore: index == 0 ? 30 : 5)
+            content.body = reminderBody(for: event, minutesBefore: reminder.minutesBefore)
             content.sound = .default
             content.userInfo = [
                 "type": "event",
@@ -102,7 +112,7 @@ final class EventReminderManager {
 
             let components = Calendar.current.dateComponents(
                 [.year, .month, .day, .hour, .minute],
-                from: reminderDate
+                from: reminder.fireDate
             )
 
             let trigger = UNCalendarNotificationTrigger(
@@ -111,13 +121,18 @@ final class EventReminderManager {
             )
 
             let request = UNNotificationRequest(
-                identifier: identifiers[index],
+                identifier: reminderIdentifier(for: event, suffix: reminder.id),
                 content: content,
                 trigger: trigger
             )
 
             try await UNUserNotificationCenter.current().add(request)
+            scheduledCount += 1
         }
+
+        #if DEBUG
+        print("🔔 [EventReminderManager] Local reminders scheduled:", event.id, scheduledCount)
+        #endif
     }
 
     func cancelLocalReminders(for event: AppState.TGEvent) {
@@ -125,6 +140,10 @@ final class EventReminderManager {
             .removePendingNotificationRequests(
                 withIdentifiers: reminderIdentifiers(for: event)
             )
+
+        #if DEBUG
+        print("🔕 [EventReminderManager] Local reminders cancelled:", event.id)
+        #endif
     }
 
     private func requestCalendarAccessIfNeeded() async throws -> Bool {
@@ -186,6 +205,16 @@ final class EventReminderManager {
         }
     }
 
+    private func addCalendarAlarmIfFuture(
+        to calendarEvent: EKEvent,
+        startsAt: Date,
+        offset: TimeInterval
+    ) {
+        let fireDate = startsAt.addingTimeInterval(offset)
+        guard fireDate > Date() else { return }
+        calendarEvent.addAlarm(EKAlarm(relativeOffset: offset))
+    }
+
     private func calendarNotes(
         for event: AppState.TGEvent,
         marker: String
@@ -194,14 +223,38 @@ final class EventReminderManager {
 
         let heroLine = event.heroLine.trimmingCharacters(in: .whitespacesAndNewlines)
         let summary = event.summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        let category = event.category.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let locationType = event.locationType.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+
+        lines.append("Trivia GOAT Event")
+        lines.append("")
 
         if !heroLine.isEmpty {
             lines.append(heroLine)
+            lines.append("")
         }
 
         if !summary.isEmpty && summary != heroLine {
-            lines.append("")
             lines.append(summary)
+            lines.append("")
+        }
+
+        if heroLine.isEmpty && summary.isEmpty {
+            lines.append("Event details are available in the Trivia GOAT event hub.")
+            lines.append("")
+        }
+
+        if !category.isEmpty {
+            lines.append("Category: \(category)")
+        }
+
+        if !locationType.isEmpty {
+            lines.append("Format: \(locationType)")
+        }
+
+        if let organizerName = event.organizerName?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !organizerName.isEmpty {
+            lines.append("Hosted by: \(organizerName)")
         }
 
         lines.append("")
@@ -212,17 +265,26 @@ final class EventReminderManager {
 
         return lines.joined(separator: "\n")
     }
-
     private func reminderBody(for event: AppState.TGEvent, minutesBefore: Int) -> String {
+        if minutesBefore == 0 {
+            return "Your Trivia GOAT event is live now."
+        }
+
+        if minutesBefore >= 24 * 60 {
+            return "Your Trivia GOAT event starts tomorrow."
+        }
+
+        if minutesBefore >= 60 {
+            return "Your Trivia GOAT event starts in 1 hour."
+        }
+
         let heroLine = event.heroLine.trimmingCharacters(in: .whitespacesAndNewlines)
 
         if !heroLine.isEmpty {
             return heroLine
         }
 
-        return minutesBefore <= 5
-            ? "Your Trivia GOAT event is about to start."
-            : "Your Trivia GOAT event starts in \(minutesBefore) minutes."
+        return "Your Trivia GOAT event starts in \(minutesBefore) minutes."
     }
 
     private func eventHubURLString(for event: AppState.TGEvent) -> String {
@@ -238,10 +300,16 @@ final class EventReminderManager {
         "TriviaGOATEventID:\(event.id)"
     }
 
+    private func reminderIdentifier(for event: AppState.TGEvent, suffix: String) -> String {
+        "tg.event.reminder.\(event.id).\(suffix)"
+    }
+
     private func reminderIdentifiers(for event: AppState.TGEvent) -> [String] {
         [
-            "tg.event.reminder.\(event.id).30m",
-            "tg.event.reminder.\(event.id).5m"
+            reminderIdentifier(for: event, suffix: "24h"),
+            reminderIdentifier(for: event, suffix: "1h"),
+            reminderIdentifier(for: event, suffix: "5m"),
+            reminderIdentifier(for: event, suffix: "live")
         ]
     }
 }

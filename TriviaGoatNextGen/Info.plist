@@ -35,5 +35,11 @@
     <key>NSUserNotificationsUsageDescription</key>
     <string>Trivia GOAT sends reminders for upcoming events and matches.</string>
 
+    <key>NSContactsUsageDescription</key>
+    <string>Trivia GOAT uses your contacts so event creators can quickly invite attendees, speakers, delegates, sponsors, staff, and VIP guests.</string>
+    
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>Trivia GOAT uses your photo library so event creators can add guest and speaker headshots.</string>
+
 </dict>
 </plist>

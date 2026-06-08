@@ -76,6 +76,32 @@ final class AppState: ObservableObject {
         let createdAt: Date?
     }
     
+    struct EventGuest: Identifiable, Equatable {
+
+        let id: String
+
+        let eventID: String
+
+        let name: String
+        let email: String
+
+        let organization: String
+        let bio: String
+
+        let role: String
+
+        let isVIP: Bool
+
+        let headshotURL: String?
+
+        let invitationStatus: String
+
+        let invitedAt: Date?
+        let acceptedAt: Date?
+
+        let createdAt: Date?
+    }
+    
     @Published var route: Route = .landing
     
     // --- FIX: PERSISTENCE LATCHES ---
@@ -133,6 +159,10 @@ final class AppState: ObservableObject {
     @Published private(set) var events: [TGEvent] = []
     @Published private(set) var featuredEvent: TGEvent? = nil
     @Published var selectedEvent: TGEvent?
+    @Published private(set) var eventGuests: [String: [EventGuest]] = [:]
+    @Published private(set) var isRefreshingEventGuests: Bool = false
+
+    private var eventGuestListeners: [String: ListenerRegistration] = [:]
     
     private var communityPulseListener: ListenerRegistration?
     private var eventsListener: ListenerRegistration?
@@ -551,6 +581,52 @@ final class AppState: ObservableObject {
             }
     }
     
+    func startEventGuestsListener(for eventID: String) {
+        let cleanedID = eventID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanedID.isEmpty else { return }
+
+        if eventGuestListeners[cleanedID] != nil { return }
+
+        eventGuestListeners[cleanedID] = FirestoreService.db
+            .collection("events")
+            .document(cleanedID)
+            .collection("guests")
+            .addSnapshotListener { [weak self] snapshot, error in
+                guard let self else { return }
+
+                if let error {
+                    print("⚠️ Event guests listener failed: \(error)")
+                    return
+                }
+
+                let guests: [EventGuest] = snapshot?.documents.compactMap { doc in
+                    let data = doc.data()
+
+                    return EventGuest(
+                        id: doc.documentID,
+                        eventID: data["eventId"] as? String ?? cleanedID,
+                        name: data["name"] as? String ?? "",
+                        email: data["email"] as? String ?? "",
+                        organization: data["organization"] as? String ?? "",
+                        bio: data["bio"] as? String ?? "",
+                        role: data["role"] as? String ?? "Guest",
+                        isVIP: data["isVIP"] as? Bool ?? false,
+                        headshotURL: data["headshotURL"] as? String,
+                        invitationStatus: data["invitationStatus"] as? String ?? "staged",
+                        invitedAt: (data["invitedAt"] as? Timestamp)?.dateValue(),
+                        acceptedAt: (data["acceptedAt"] as? Timestamp)?.dateValue(),
+                        createdAt: (data["createdAt"] as? Timestamp)?.dateValue()
+                    )
+                } ?? []
+
+                Task { @MainActor in
+                    self.eventGuests[cleanedID] = guests.sorted {
+                        $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+                    }
+                }
+            }
+    }
+    
     private func completeEventDeepLink(with event: TGEvent, source: String) {
         pendingEventDeepLinkID = nil
         selectedEvent = event
@@ -909,6 +985,30 @@ final class AppState: ObservableObject {
         } else {
             payload["endsAt"] = NSNull()
             payload["endAt"] = NSNull()
+        }
+        
+        if let rsvpOpensAt = draft.rsvpOpensAt {
+            payload["rsvpOpensAt"] = Timestamp(date: rsvpOpensAt)
+        } else {
+            payload["rsvpOpensAt"] = NSNull()
+        }
+
+        if let rsvpClosesAt = draft.rsvpClosesAt {
+            payload["rsvpClosesAt"] = Timestamp(date: rsvpClosesAt)
+        } else {
+            payload["rsvpClosesAt"] = NSNull()
+        }
+
+        if draft.waitlistEnabled, let waitlistOpensAt = draft.waitlistOpensAt {
+            payload["waitlistOpensAt"] = Timestamp(date: waitlistOpensAt)
+        } else {
+            payload["waitlistOpensAt"] = NSNull()
+        }
+
+        if draft.waitlistEnabled, let waitlistClosesAt = draft.waitlistClosesAt {
+            payload["waitlistClosesAt"] = Timestamp(date: waitlistClosesAt)
+        } else {
+            payload["waitlistClosesAt"] = NSNull()
         }
         
         FirestoreService.db
@@ -1818,6 +1918,10 @@ final class AppState: ObservableObject {
                 }
             }
             .store(in: &cancellables)
+    }
+    
+    func guests(for eventID: String) -> [EventGuest] {
+        eventGuests[eventID] ?? []
     }
     
     // MARK: - Boot
@@ -3561,6 +3665,127 @@ final class AppState: ObservableObject {
             }
         }
     }
+    
+    func startGuestListener(for eventID: String) {
+
+        if eventGuestListeners[eventID] != nil {
+            return
+        }
+
+        isRefreshingEventGuests = true
+
+        eventGuestListeners[eventID] =
+        FirestoreService.db
+            .collection("eventGuests")
+            .whereField("eventID", isEqualTo: eventID)
+            .addSnapshotListener { [weak self] snapshot, error in
+
+                guard let self else { return }
+
+                if let error {
+                    print("⚠️ Event guests listener error: \(error)")
+                    self.isRefreshingEventGuests = false
+                    return
+                }
+
+                let guests: [EventGuest] =
+                snapshot?.documents.compactMap { doc in
+
+                    let data = doc.data()
+
+                    return EventGuest(
+                        id: doc.documentID,
+                        eventID: data["eventID"] as? String ?? "",
+
+                        name: data["name"] as? String ?? "",
+                        email: data["email"] as? String ?? "",
+
+                        organization: data["organization"] as? String ?? "",
+                        bio: data["bio"] as? String ?? "",
+
+                        role: data["role"] as? String ?? "Attendee",
+
+                        isVIP: data["isVIP"] as? Bool ?? false,
+
+                        headshotURL: data["headshotURL"] as? String,
+
+                        invitationStatus:
+                            data["invitationStatus"] as? String ?? "manual",
+
+                        invitedAt:
+                            (data["invitedAt"] as? Timestamp)?.dateValue(),
+
+                        acceptedAt:
+                            (data["acceptedAt"] as? Timestamp)?.dateValue(),
+
+                        createdAt:
+                            (data["createdAt"] as? Timestamp)?.dateValue()
+                    )
+
+                } ?? []
+
+                Task { @MainActor in
+
+                    self.eventGuests[eventID] = guests.sorted {
+                        $0.name < $1.name
+                    }
+
+                    self.isRefreshingEventGuests = false
+                }
+            }
+    }
+    
+    func createEventGuest(
+        eventID: String,
+        name: String,
+        email: String,
+        organization: String,
+        role: String,
+        bio: String = "",
+        isVIP: Bool = false
+    ) {
+
+        let payload: [String: Any] = [
+
+            "eventID": eventID,
+
+            "name": name,
+            "email": email,
+
+            "organization": organization,
+            "bio": bio,
+
+            "role": role,
+
+            "isVIP": isVIP,
+
+            "invitationStatus": "manual",
+
+            "createdAt": FieldValue.serverTimestamp()
+        ]
+
+        FirestoreService.db
+            .collection("eventGuests")
+            .addDocument(data: payload)
+    }
+    
+    func inviteEventGuest(
+        eventID: String,
+        guestID: String,
+        email: String
+    ) {
+
+        FirestoreService.db
+            .collection("eventGuests")
+            .document(guestID)
+            .setData([
+                "invitationStatus": "invited",
+                "invitedAt": FieldValue.serverTimestamp()
+            ], merge: true)
+
+        showEventToast("INVITATION STAGED")
+    }
+    
     
     private func persistProfileNow(uid: String? = nil) async throws {
         let name = profile.displayName

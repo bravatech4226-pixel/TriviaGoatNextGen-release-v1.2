@@ -79,7 +79,8 @@ struct EventEditorView: View {
     }
 
     private var waitlistWindowIsValid: Bool {
-        waitlistOpensAt <= waitlistClosesAt && waitlistClosesAt <= startDate
+        guard draft.waitlistEnabled else { return true }
+        return waitlistOpensAt <= waitlistClosesAt && waitlistClosesAt <= startDate
     }
 
     private var capacityIsValid: Bool {
@@ -115,8 +116,10 @@ struct EventEditorView: View {
         if startDate >= endDate { return "End date must be after start date" }
         if rsvpOpensAt > rsvpClosesAt { return "RSVP open must be before RSVP close" }
         if rsvpClosesAt > startDate { return "RSVP must close before event starts" }
+        if draft.waitlistEnabled {
         if waitlistOpensAt > waitlistClosesAt { return "Waitlist open must be before waitlist close" }
         if waitlistClosesAt > startDate { return "Waitlist must close before event starts" }
+        }
         if draft.capacity <= 0 { return "Capacity required" }
         return isEditMode ? "Ready to update draft" : "Ready to save draft"
     }
@@ -186,6 +189,10 @@ struct EventEditorView: View {
             .onChange(of: waitlistOpensAt) { _, _ in normalizeDateState(); syncDraftDates() }
             .onChange(of: waitlistClosesAt) { _, _ in normalizeDateState(); syncDraftDates() }
             .onChange(of: draft.capacity) { _, _ in syncDraftDates() }
+            .onChange(of: draft.waitlistEnabled) { _, _ in
+                normalizeDateState()
+                syncDraftDates()
+            }
         }
     }
 
@@ -992,8 +999,14 @@ struct EventEditorView: View {
 
         draft.rsvpOpensAt = rsvpOpensAt
         draft.rsvpClosesAt = rsvpClosesAt
-        draft.waitlistOpensAt = waitlistOpensAt
-        draft.waitlistClosesAt = waitlistClosesAt
+
+        if draft.waitlistEnabled {
+            draft.waitlistOpensAt = waitlistOpensAt
+            draft.waitlistClosesAt = waitlistClosesAt
+        } else {
+            draft.waitlistOpensAt = nil
+            draft.waitlistClosesAt = nil
+        }
     }
 
     @ViewBuilder

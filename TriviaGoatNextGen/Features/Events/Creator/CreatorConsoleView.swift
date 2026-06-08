@@ -41,7 +41,27 @@ struct CreatorConsoleView: View {
     }
 
     private var liveEvents: [AppState.TGEvent] {
-        managedEvents.filter { $0.published && $0.approvalStatus == "approved" }
+        managedEvents.filter { event in
+            let status = event.status
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+
+            if status == "live" {
+                return true
+            }
+
+            guard let startsAt = event.startsAt else {
+                return false
+            }
+
+            let endsAt = event.endsAt ?? startsAt.addingTimeInterval(2 * 60 * 60)
+            let now = Date()
+
+            return event.published
+            && event.approvalStatus == "approved"
+            && now >= startsAt
+            && now <= endsAt
+        }
     }
 
     private var draftEvents: [AppState.TGEvent] {
@@ -548,6 +568,14 @@ struct CreatorConsoleView: View {
     }
 
     private func statusLabel(for event: AppState.TGEvent) -> String {
+        let status = event.status
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .uppercased()
+
+        if status == "LIVE" {
+            return "LIVE"
+        }
+
         if event.published && event.approvalStatus == "approved" {
             return "PUBLISHED"
         }
@@ -556,8 +584,16 @@ struct CreatorConsoleView: View {
     }
 
     private func statusIcon(for event: AppState.TGEvent) -> String {
-        if event.published && event.approvalStatus == "approved" {
+        let status = event.status
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+
+        if status == "live" {
             return "dot.radiowaves.left.and.right"
+        }
+
+        if event.published && event.approvalStatus == "approved" {
+            return "calendar.badge.checkmark"
         }
 
         switch event.approvalStatus {
@@ -570,6 +606,14 @@ struct CreatorConsoleView: View {
     }
 
     private func statusColor(for event: AppState.TGEvent) -> Color {
+        let status = event.status
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+
+        if status == "live" {
+            return .orange
+        }
+
         if event.published && event.approvalStatus == "approved" {
             return .green
         }
