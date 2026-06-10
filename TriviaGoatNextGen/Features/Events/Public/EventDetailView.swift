@@ -14,6 +14,7 @@
 import SwiftUI
 import Combine
 import UIKit
+import FirebaseFirestore
 
 struct EventDetailView: View {
 
@@ -25,12 +26,278 @@ struct EventDetailView: View {
     @State private var showShareSheet = false
     @State private var now = Date()
     @State private var pulse = false
+    @State private var eventSessions: [EventPublicSession] = []
+    @State private var eventSessionsListener: ListenerRegistration? = nil
 
     private let timer = Timer.publish(every: 10, on: .main, in: .common).autoconnect()
 
     private var currentEvent: AppState.TGEvent {
         app.events.first(where: { $0.id == event.id }) ?? app.selectedEvent ?? event
     }
+
+    private var crmGuests: [AppState.EventGuest] {
+        app.guests(for: currentEvent.id)
+    }
+
+    private func normalizedGuestStatus(_ rawValue: String) -> String {
+        rawValue
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "-", with: "_")
+            .replacingOccurrences(of: " ", with: "_")
+    }
+
+    private var confirmedGuestCount: Int {
+        crmGuests.filter { guest in
+            let status = normalizedGuestStatus(guest.invitationStatus)
+            return status == "accepted" || status == "checked_in" || status == "checkedin"
+        }.count
+    }
+
+    private var liveRegisteredCount: Int {
+        max(currentEvent.attendeeCount, confirmedGuestCount)
+    }
+
+    private var liveWaitlistCount: Int {
+        let crmWaitlistCount = crmGuests.filter { guest in
+            let status = normalizedGuestStatus(guest.invitationStatus)
+            return status == "waitlisted" || status == "waitlist" || status == "waiting"
+        }.count
+
+        return max(currentEvent.waitlistCount, crmWaitlistCount)
+    }
+
+
+    private struct EventPublicSession: Identifiable, Equatable {
+        let id: String
+        let title: String
+        let description: String
+        let speakerIDs: [String]
+        let room: String
+        let track: String
+        let startsAt: Date?
+        let endsAt: Date?
+        let capacity: Int
+        let featured: Bool
+        let status: String
+    }
+
+    private var visibleEventSessions: [EventPublicSession] {
+        eventSessions
+            .filter { session in
+                let status = session.status
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .lowercased()
+                return status != "hidden" && status != "deleted" && status != "archived"
+            }
+            .sorted { lhs, rhs in
+                switch (lhs.startsAt, rhs.startsAt) {
+                case let (.some(left), .some(right)):
+                    return left < right
+                case (.some, .none):
+                    return true
+                case (.none, .some):
+                    return false
+                case (.none, .none):
+                    return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+                }
+            }
+    }
+
+    private func startEventSessionsListener(for eventID: String) {
+        let cleanedID = eventID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanedID.isEmpty else { return }
+
+        stopEventSessionsListener()
+
+        eventSessionsListener = FirestoreService.db
+            .collection("events")
+            .document(cleanedID)
+            .collection("sessions")
+            .addSnapshotListener { snapshot, error in
+                if let error {
+                    print("⚠️ [EventDetailView] Sessions listener failed:", error)
+                    return
+                }
+
+                let sessions: [EventPublicSession] = snapshot?.documents.compactMap { doc in
+                    let data = doc.data()
+
+                    return EventPublicSession(
+                        id: doc.documentID,
+                        title: data["title"] as? String ?? "",
+                        description: data["description"] as? String ?? "",
+                        speakerIDs: data["speakerIDs"] as? [String] ?? [],
+                        room: data["room"] as? String ?? "",
+                        track: data["track"] as? String ?? "",
+                        startsAt: eventDetailDateValue(data["startsAt"]),
+                        endsAt: eventDetailDateValue(data["endsAt"]),
+                        capacity: data["capacity"] as? Int ?? 0,
+                        featured: data["featured"] as? Bool ?? false,
+                        status: data["status"] as? String ?? "published"
+                    )
+                } ?? []
+
+                Task { @MainActor in
+                    self.eventSessions = sessions
+                    print("🟢 [EventDetailView] Loaded event sessions:", sessions.count)
+                }
+            }
+    }
+
+    private func stopEventSessionsListener() {
+        eventSessionsListener?.remove()
+        eventSessionsListener = nil
+        eventSessions = []
+    }
+
+    private func eventDetailDateValue(_ value: Any?) -> Date? {
+        if let timestamp = value as? Timestamp {
+            return timestamp.dateValue()
+        }
+
+        if let date = value as? Date {
+            return date
+        }
+
+        if let seconds = value as? TimeInterval {
+            return Date(timeIntervalSince1970: seconds)
+        }
+
+        if let iso = value as? String {
+            let formatter = ISO8601DateFormatter()
+            return formatter.date(from: iso)
+        }
+
+        return nil
+    }
+
+    @ViewBuilder
+    private var publicAgendaSection: some View {
+        if !visibleEventSessions.isEmpty {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .firstTextBaseline) {
+                    sectionHeader(
+                        title: "EVENT AGENDA",
+                        subtitle: "Sessions, speakers, rooms, and timing"
+                    )
+
+                    Spacer()
+
+                    Text("\(visibleEventSessions.count) SESSION\(visibleEventSessions.count == 1 ? "" : "S")")
+                        .font(.system(size: 8, weight: .black, design: .monospaced))
+                        .foregroundColor(.white.opacity(0.46))
+                        .tracking(1)
+                }
+
+                VStack(spacing: 12) {
+                    ForEach(visibleEventSessions) { session in
+                        publicAgendaSessionCard(session)
+                    }
+                }
+            }
+            .padding(16)
+            .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Color.white.opacity(0.045)))
+            .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(Color.white.opacity(0.09), lineWidth: 1))
+        }
+    }
+
+    private func publicAgendaSessionCard(_ session: EventPublicSession) -> some View {
+        HStack(alignment: .top, spacing: 14) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(sessionTimeText(session.startsAt))
+                    .font(.system(size: 11, weight: .black, design: .monospaced))
+                    .foregroundColor(.orange.opacity(0.94))
+                    .lineLimit(1)
+
+                Text(sessionTimeText(session.endsAt))
+                    .font(.system(size: 9, weight: .black, design: .monospaced))
+                    .foregroundColor(.white.opacity(0.44))
+                    .lineLimit(1)
+            }
+            .frame(width: 62, alignment: .leading)
+
+            VStack(alignment: .leading, spacing: 7) {
+                HStack(spacing: 8) {
+                    Text(session.title.isEmpty ? "Untitled Session" : session.title)
+                        .font(.system(size: 15, weight: .black, design: .rounded))
+                        .foregroundColor(.white.opacity(0.94))
+                        .lineLimit(2)
+
+                    if session.featured {
+                        Text("FEATURED")
+                            .font(.system(size: 7, weight: .black, design: .monospaced))
+                            .foregroundColor(.black.opacity(0.88))
+                            .padding(.horizontal, 7)
+                            .frame(height: 18)
+                            .background(Capsule().fill(Color.orange.opacity(0.96)))
+                    }
+                }
+
+                let meta = publicAgendaMetaText(session)
+                if !meta.isEmpty {
+                    Text(meta)
+                        .font(.system(size: 9, weight: .black, design: .monospaced))
+                        .foregroundColor(.white.opacity(0.42))
+                        .tracking(0.8)
+                        .lineLimit(2)
+                }
+
+                let names = sessionSpeakerNames(for: session)
+                if !names.isEmpty {
+                    Text(names)
+                        .font(.system(size: 11, weight: .black, design: .rounded))
+                        .foregroundColor(.orange.opacity(0.88))
+                        .lineLimit(2)
+                }
+
+                if !session.description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text(session.description)
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundColor(.white.opacity(0.62))
+                        .lineLimit(4)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Color.black.opacity(0.32)))
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(session.featured ? Color.orange.opacity(0.22) : Color.white.opacity(0.07), lineWidth: 1))
+    }
+
+    private func sessionTimeText(_ date: Date?) -> String {
+        guard let date else { return "TBA" }
+
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = .current
+        formatter.dateFormat = "h:mm a"
+        return formatter.string(from: date).uppercased()
+    }
+
+    private func publicAgendaMetaText(_ session: EventPublicSession) -> String {
+        [session.track, session.room]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .map { $0.uppercased() }
+            .joined(separator: " • ")
+    }
+
+    private func sessionSpeakerNames(for session: EventPublicSession) -> String {
+        let normalizedIDs = Set(session.speakerIDs.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) })
+
+        let matched = crmGuests.filter { guest in
+            normalizedIDs.contains(guest.id)
+        }
+
+        return matched
+            .map { $0.name.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: ", ")
+    }
+
 
     var body: some View {
         GeometryReader { geo in
@@ -50,6 +317,8 @@ struct EventDetailView: View {
                             eventSnapshotCard
                             timelineCard
                             momentumCard
+                            publicAgendaSection
+                            meetTheSpeakersSection
                             detailSection
                             organizerSection
                             hostManagementCard
@@ -68,6 +337,8 @@ struct EventDetailView: View {
             .navigationBarHidden(true)
             .onAppear {
                 app.selectedEvent = currentEvent
+                app.startEventGuestsListener(for: event.id)
+                startEventSessionsListener(for: currentEvent.id)
 
                 if !isLiveNow && !hasEnded {
                     app.listenToRSVPState(for: currentEvent.id)
@@ -80,10 +351,177 @@ struct EventDetailView: View {
             .onReceive(timer) { value in
                 now = value
             }
+            .onDisappear {
+                stopEventSessionsListener()
+            }
             .sheet(isPresented: $showShareSheet) {
                 EventShareSheet(items: eventShareItems)
             }
         }
+    }
+
+    @ViewBuilder
+    private var meetTheSpeakersSection: some View {
+        let speakers = crmGuests
+            .filter { guest in
+                let role = guest.role
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .lowercased()
+                    .replacingOccurrences(of: "-", with: "_")
+                    .replacingOccurrences(of: " ", with: "_")
+
+                return role == "speaker" || role == "moderator" || role == "panelist"
+            }
+            .sorted { lhs, rhs in
+                let lhsRole = lhs.role.localizedCaseInsensitiveCompare(rhs.role)
+                if lhsRole != .orderedSame {
+                    return speakerSortRank(lhs.role) < speakerSortRank(rhs.role)
+                }
+
+                return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+            }
+
+        if !speakers.isEmpty {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("MEET THE SPEAKERS")
+                    .font(.system(size: 10, weight: .black, design: .monospaced))
+                    .foregroundColor(.orange.opacity(0.92))
+                    .tracking(2)
+
+                VStack(spacing: 12) {
+                    ForEach(speakers) { speaker in
+                        speakerProfileCard(speaker)
+                    }
+                }
+            }
+            .padding(16)
+            .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Color.white.opacity(0.045)))
+            .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(Color.white.opacity(0.09), lineWidth: 1))
+        }
+    }
+
+    private func speakerProfileCard(_ speaker: AppState.EventGuest) -> some View {
+        HStack(alignment: .top, spacing: 14) {
+            speakerPortrait(speaker)
+
+            VStack(alignment: .leading, spacing: 7) {
+                Text(speaker.name.isEmpty ? "Featured Speaker" : speaker.name)
+                    .font(.system(size: 16, weight: .black, design: .rounded))
+                    .foregroundColor(.white.opacity(0.94))
+                    .lineLimit(2)
+
+                Text(publicSpeakerRoleLabel(speaker.role))
+                    .font(.system(size: 8, weight: .black, design: .monospaced))
+                    .foregroundColor(.black.opacity(0.88))
+                    .tracking(0.8)
+                    .padding(.horizontal, 8)
+                    .frame(height: 21)
+                    .background(Capsule().fill(Color.orange.opacity(0.96)))
+
+                if !speaker.organization.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text(speaker.organization)
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .foregroundColor(.white.opacity(0.58))
+                        .lineLimit(2)
+                }
+
+                if !speaker.bio.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text(speaker.bio)
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundColor(.white.opacity(0.66))
+                        .lineLimit(4)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Color.black.opacity(0.32)))
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Color.orange.opacity(0.16), lineWidth: 1))
+    }
+
+    private func speakerSortRank(_ role: String) -> Int {
+        switch normalizedSpeakerRole(role) {
+        case "keynote", "keynote_speaker": return 0
+        case "speaker": return 1
+        case "panelist": return 2
+        case "moderator": return 3
+        default: return 9
+        }
+    }
+
+    private func normalizedSpeakerRole(_ rawValue: String) -> String {
+        rawValue
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "-", with: "_")
+            .replacingOccurrences(of: " ", with: "_")
+    }
+
+    private func publicSpeakerRoleLabel(_ role: String) -> String {
+        switch normalizedSpeakerRole(role) {
+        case "keynote", "keynote_speaker": return "KEYNOTE SPEAKER"
+        case "panelist": return "PANELIST"
+        case "moderator": return "MODERATOR"
+        case "speaker": return "SPEAKER"
+        default:
+            let cleaned = role.trimmingCharacters(in: .whitespacesAndNewlines)
+            return cleaned.isEmpty ? "SPEAKER" : cleaned.uppercased()
+        }
+    }
+
+    @ViewBuilder
+    private func speakerPortrait(_ speaker: AppState.EventGuest) -> some View {
+        if let urlString = speaker.headshotURL,
+           let url = URL(string: urlString.trimmingCharacters(in: .whitespacesAndNewlines)),
+           !urlString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+
+                case .failure:
+                    speakerPortraitPlaceholder(speaker)
+
+                case .empty:
+                    ProgressView()
+                        .tint(.orange)
+
+                @unknown default:
+                    speakerPortraitPlaceholder(speaker)
+                }
+            }
+            .frame(width: 64, height: 64)
+            .clipShape(Circle())
+            .overlay(Circle().stroke(Color.orange.opacity(0.30), lineWidth: 1.2))
+            .shadow(color: Color.orange.opacity(0.12), radius: 10, x: 0, y: 4)
+        } else {
+            speakerPortraitPlaceholder(speaker)
+                .frame(width: 64, height: 64)
+        }
+    }
+
+    private func speakerPortraitPlaceholder(_ speaker: AppState.EventGuest) -> some View {
+        let initials = speaker.name
+            .split(separator: " ")
+            .prefix(2)
+            .compactMap { $0.first }
+            .map { String($0).uppercased() }
+            .joined()
+
+        return ZStack {
+            Circle()
+                .fill(Color.orange.opacity(0.12))
+
+            Text(initials.isEmpty ? "TG" : initials)
+                .font(.system(size: 15, weight: .black, design: .monospaced))
+                .foregroundColor(.orange.opacity(0.95))
+        }
+        .overlay(Circle().stroke(Color.orange.opacity(0.30), lineWidth: 1.2))
+    .shadow(color: Color.orange.opacity(0.12), radius: 10, x: 0, y: 4)
     }
 
     private func header(safeTop: CGFloat) -> some View {
@@ -168,7 +606,7 @@ struct EventDetailView: View {
 
                     Circle()
                         .stroke(statusColor.opacity(0.22), lineWidth: 1)
-                        .frame(width: 58, height: 58)
+                        .frame(width: 64, height: 64)
 
                     Image(systemName: statusIcon)
                         .font(.system(size: 25, weight: .black))
@@ -450,13 +888,13 @@ struct EventDetailView: View {
             HStack(spacing: 10) {
                 momentumMetric(
                     title: "REGISTERED",
-                    value: "\(currentEvent.attendeeCount)",
+                    value: "\(liveRegisteredCount)",
                     icon: "person.2.fill"
                 )
 
                 momentumMetric(
                     title: "WAITLIST",
-                    value: "\(currentEvent.waitlistCount)",
+                    value: "\(liveWaitlistCount)",
                     icon: "person.crop.circle.badge.clock"
                 )
 
@@ -787,7 +1225,7 @@ struct EventDetailView: View {
             )
         }
     }
-    
+
     private func eventStateDock(
         title: String,
         subtitle: String,
@@ -906,7 +1344,7 @@ struct EventDetailView: View {
     private var isWaitlisted: Bool {
         app.hasJoinedWaitlist(currentEvent.id)
     }
-    
+
     private var isWaitlistOpen: Bool {
         app.isWaitlistWindowOpen(for: currentEvent)
     }
@@ -916,13 +1354,13 @@ struct EventDetailView: View {
         if !hero.isEmpty { return hero }
         return currentEvent.summary.trimmingCharacters(in: .whitespacesAndNewlines)
     }
-    
+
     private var normalizedStatus: String {
         currentEvent.status
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
     }
-    
+
     private var headerSubtitle: String {
         if isLiveNow { return "LIVE NOW" }
         if hasEnded { return "EVENT ARCHIVE" }
@@ -1042,18 +1480,18 @@ struct EventDetailView: View {
 
     private var attendeeText: String {
         if isFull && currentEvent.waitlistEnabled {
-            return "\(currentEvent.waitlistCount) WAITLISTED"
+            return "\(liveWaitlistCount) WAITLISTED"
         }
 
         guard currentEvent.capacity > 0 else {
-            return "\(currentEvent.attendeeCount) RSVP"
+            return "\(liveRegisteredCount) RSVP"
         }
 
-        if currentEvent.attendeeCount >= currentEvent.capacity {
+        if liveRegisteredCount >= currentEvent.capacity {
             return "FULL"
         }
 
-        return "\(currentEvent.attendeeCount)/\(currentEvent.capacity) RSVP"
+        return "\(liveRegisteredCount)/\(currentEvent.capacity) RSVP"
     }
 
     private var accessText: String {
@@ -1129,20 +1567,20 @@ struct EventDetailView: View {
     }
 
     private var isFull: Bool {
-        currentEvent.capacity > 0 && currentEvent.attendeeCount >= currentEvent.capacity
+        currentEvent.capacity > 0 && liveRegisteredCount >= currentEvent.capacity
     }
 
     private var capacityProgress: CGFloat {
         guard currentEvent.capacity > 0 else {
-            return currentEvent.attendeeCount > 0 ? 1 : 0
+            return liveRegisteredCount > 0 ? 1 : 0
         }
 
-        return min(1, CGFloat(currentEvent.attendeeCount) / CGFloat(currentEvent.capacity))
+        return min(1, CGFloat(liveRegisteredCount) / CGFloat(currentEvent.capacity))
     }
 
     private var capacityPercentText: String {
         guard currentEvent.capacity > 0 else {
-            return currentEvent.attendeeCount > 0 ? "OPEN" : "0%"
+            return liveRegisteredCount > 0 ? "OPEN" : "0%"
         }
 
         return "\(Int(capacityProgress * 100))%"
@@ -1250,6 +1688,7 @@ struct EventDetailView: View {
         }
     }
 }
+
 
 private struct EventDetailAmbientGlow: View {
     let pulse: Bool

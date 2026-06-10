@@ -254,7 +254,7 @@ match /databases/{database}/documents {
       allow delete: if false;
     }
 
-    match /events/{eventId} {
+  match /events/{eventId} {
   allow read: if true;
 
   allow create: if isWebAdmin()
@@ -266,6 +266,25 @@ match /databases/{database}/documents {
       && request.resource.data.status == "draft"
       && request.resource.data.published == false
     );
+
+    /**
+   * Event CRM guest directory.
+   * Used by EventManagementView for invitations,
+   * accepted guests, speakers, delegates and VIPs.
+   */
+  match /guests/{guestId} {
+    allow read: if signedIn();
+
+    allow create, update, delete: if isWebAdmin()
+      || (
+        signedIn()
+        && get(/databases/$(database)/documents/events/$(eventId)).data.organizerUID == request.auth.uid
+      )
+      || (
+        signedIn()
+        && get(/databases/$(database)/documents/events/$(eventId)).data.submittedByUID == request.auth.uid
+      );
+  }
 
   allow update: if (
     isWebAdmin()
@@ -306,6 +325,24 @@ match /databases/{database}/documents {
     allow update: if isWebAdmin();
     allow delete: if false;
   }
+
+/**
+ * Event sessions / agenda builder.
+ * Used by EventManagementView Session Builder.
+ */
+match /sessions/{sessionId} {
+  allow read: if signedIn();
+
+  allow create, update, delete: if isWebAdmin()
+    || (
+      signedIn()
+      && get(/databases/$(database)/documents/events/$(eventId)).data.organizerUID == request.auth.uid
+    )
+    || (
+      signedIn()
+      && get(/databases/$(database)/documents/events/$(eventId)).data.submittedByUID == request.auth.uid
+    );
+}
 
     /**
    * Event RSVP records.

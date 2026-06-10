@@ -15,6 +15,7 @@ import UIKit
 import Contacts
 import ContactsUI
 import FirebaseFunctions
+import FirebaseFirestore
 
 struct EventManagementView: View {
 
@@ -35,6 +36,34 @@ struct EventManagementView: View {
     @State private var guestRecords: [GuestRecord] = []
     @State private var guestFilter: GuestFilter = .all
 
+    @State private var sessionRecords: [EventSession] = []
+    @State private var liveEventSessionsListener: ListenerRegistration? = nil
+    @State private var liveEventSessionsEventID: String = ""
+
+    @State private var sessionTitle: String = ""
+    @State private var sessionDescription: String = ""
+    @State private var sessionRoom: String = "Main Stage"
+    @State private var sessionTrack: String = "General"
+    @State private var sessionStartsAt: Date = Date()
+    @State private var sessionEndsAt: Date = Date().addingTimeInterval(3600)
+    @State private var sessionCapacityText: String = ""
+    @State private var sessionFeatured: Bool = false
+    @State private var sessionStatus: String = "draft"
+    @State private var selectedSessionSpeakerIDs: Set<String> = []
+    @State private var isSavingSession: Bool = false
+    @State private var editingSession: EventSession? = nil
+    @State private var editSessionTitle: String = ""
+    @State private var editSessionDescription: String = ""
+    @State private var editSessionRoom: String = "Main Stage"
+    @State private var editSessionTrack: String = "General"
+    @State private var editSessionStartsAt: Date = Date()
+    @State private var editSessionEndsAt: Date = Date().addingTimeInterval(3600)
+    @State private var editSessionCapacityText: String = ""
+    @State private var editSessionFeatured: Bool = false
+    @State private var editSessionStatus: String = "draft"
+    @State private var editSessionSpeakerIDs: Set<String> = []
+
+
     @State private var contactImportRole: GuestRole = .delegate
     @State private var contactImportVIP: Bool = false
     @State private var contactsPermissionStatus: CNAuthorizationStatus = CNContactStore.authorizationStatus(for: .contacts)
@@ -44,6 +73,9 @@ struct EventManagementView: View {
     @State private var selectedContactIDs: Set<String> = []
     @State private var showNativeContactPicker: Bool = false
     @State private var isSendingStagedInvitations: Bool = false
+    @State private var liveEventGuests: [AppState.EventGuest] = []
+    @State private var liveEventGuestsListener: ListenerRegistration? = nil
+    @State private var liveEventGuestsEventID: String = ""
 
     @State private var editingGuest: GuestRecord? = nil
     @State private var editGuestName: String = ""
@@ -53,6 +85,9 @@ struct EventManagementView: View {
     @State private var editGuestRole: GuestRole = .delegate
     @State private var editGuestStatus: GuestStatus = .manual
     @State private var editGuestIsVIP: Bool = false
+    @State private var editGuestBio: String = ""
+    @State private var editGuestHeadshotURL: String = ""
+    @State private var editGuestFeaturedSpeaker: Bool = false
 
     private let contactStore = CNContactStore()
 
@@ -116,15 +151,27 @@ struct EventManagementView: View {
 
     private struct GuestRecord: Identifiable, Equatable {
         let id: UUID
+
         var name: String
         var email: String
+
         var organization: String
+
         var role: GuestRole
         var status: GuestStatus
+
         var isVIP: Bool
+
         var notes: String
+
+        // CRM speaker profile fields
+        var bio: String = ""
+        var headshotURL: String? = nil
+        var featuredSpeaker: Bool = false
+
         var source: String
         var createdAt: Date
+    
 
         init(
             id: UUID = UUID(),
@@ -137,7 +184,7 @@ struct EventManagementView: View {
             notes: String,
             source: String,
             createdAt: Date = Date()
-        ) {
+        ){
             self.id = id
             self.name = name
             self.email = email
@@ -183,20 +230,51 @@ struct EventManagementView: View {
         }
     }
 
+    private var liveGuestRecords: [GuestRecord] {
+        currentCRMGuests.map { crmGuestRecord(from: $0) }
+    }
+
+    private var directoryGuestRecords: [GuestRecord] {
+        let persistedEmails = Set(
+            liveGuestRecords
+                .map { normalizedEmail($0.email) }
+                .filter { !$0.isEmpty }
+        )
+
+        let localOnlyRecords = guestRecords.filter { record in
+            let email = normalizedEmail(record.email)
+            guard !email.isEmpty else { return true }
+            return !persistedEmails.contains(email)
+        }
+
+        return (liveGuestRecords + localOnlyRecords).sorted { lhs, rhs in
+            let lhsStatus = statusSortRank(lhs.status)
+            let rhsStatus = statusSortRank(rhs.status)
+
+            if lhsStatus != rhsStatus {
+                return lhsStatus < rhsStatus
+            }
+
+            return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+        }
+    }
+
     private var filteredGuests: [GuestRecord] {
+        let records = directoryGuestRecords
+
         switch guestFilter {
         case .all:
-            return guestRecords
+            return records
         case .staged:
-            return guestRecords.filter { $0.status == .staged }
+            return records.filter { $0.status == .staged }
         case .invited:
-            return guestRecords.filter { $0.status == .invited }
+            return records.filter { $0.status == .invited }
         case .accepted:
-            return guestRecords.filter { $0.status == .accepted || $0.status == .checkedIn }
+            return records.filter { $0.status == .accepted || $0.status == .checkedIn }
         case .vip:
-            return guestRecords.filter { $0.isVIP || $0.role == .vip }
+            return records.filter { $0.isVIP || $0.role == .vip }
         case .staff:
-            return guestRecords.filter { $0.role == .staff || $0.role == .moderator }
+            return records.filter { $0.role == .staff || $0.role == .moderator }
         }
     }
 
@@ -271,8 +349,13 @@ struct EventManagementView: View {
             app.selectedEvent = currentEvent
             app.refreshEvents()
             contactsPermissionStatus = CNContactStore.authorizationStatus(for: .contacts)
-            app.startEventGuestsListener(for: currentEvent.id)
-            
+
+            startLiveEventGuestsListener(for: currentEvent.id)
+            startLiveEventSessionsListener(for: currentEvent.id)
+        }
+        .onDisappear {
+            stopLiveEventGuestsListener()
+            stopLiveEventSessionsListener()
         }
     }
 
@@ -315,6 +398,9 @@ struct EventManagementView: View {
                 }
                 .sheet(item: $editingGuest) { guest in
                     guestEditSheetHost(guest)
+                }
+                .sheet(item: $editingSession) { session in
+                    sessionEditSheetHost(session)
                 }
         )
     }
@@ -387,7 +473,7 @@ struct EventManagementView: View {
                     .tracking(1)
                     .padding(.horizontal, 10)
                     .frame(height: 26)
-                    .background(Capsule().fill(Color.white.opacity(0.055)))
+                    .background(Capsule().fill(Color.white.opacity(0.085)))
 
                 Spacer()
 
@@ -542,29 +628,31 @@ struct EventManagementView: View {
     
 
     private var attendeeSnapshot: some View {
-        let guests = app.guests(for: currentEvent.id)
+        let guests = currentCRMGuests
 
         let invitedCount = guests.filter {
-            $0.invitationStatus.lowercased() == "invited"
+            normalizedInvitationStatus($0.invitationStatus) == "invited"
         }.count
 
         let acceptedCount = guests.filter {
-            $0.invitationStatus.lowercased() == "accepted"
+            normalizedInvitationStatus($0.invitationStatus) == "accepted"
         }.count
 
         let declinedCount = guests.filter {
-            $0.invitationStatus.lowercased() == "declined"
+            normalizedInvitationStatus($0.invitationStatus) == "declined"
         }.count
 
         let checkedInCount = guests.filter {
-            let status = $0.invitationStatus.lowercased()
-            return status == "checkedin" || status == "checked_in" || status == "checked in"
+            normalizedInvitationStatus($0.invitationStatus) == "checked_in"
         }.count
+
+        let confirmedGuestCount = acceptedCount + checkedInCount
+        let dashboardAttendeeCount = max(currentEvent.attendeeCount, confirmedGuestCount)
 
         return sectionPanel(title: "ATTENDEE SNAPSHOT", subtitle: "Capacity, invites, and confirmed demand") {
             VStack(spacing: 12) {
                 EventAttendeePreview(
-                    attendeeCount: currentEvent.attendeeCount,
+                    attendeeCount: dashboardAttendeeCount,
                     capacity: max(1, currentEvent.capacity),
                     accent: .orange
                 )
@@ -580,6 +668,243 @@ struct EventManagementView: View {
                 }
             }
         }
+    }
+
+    private var currentCRMGuests: [AppState.EventGuest] {
+        if !liveEventGuests.isEmpty {
+            return liveEventGuests
+        }
+
+        return app.guests(for: currentEvent.id)
+    }
+
+    private func normalizedInvitationStatus(_ rawValue: String) -> String {
+        let cleaned = rawValue
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "-", with: "_")
+            .replacingOccurrences(of: " ", with: "_")
+
+        switch cleaned {
+        case "checkedin", "checked_in":
+            return "checked_in"
+        case "accepted", "confirmed", "rsvp", "rsvped":
+            return "accepted"
+        case "declined", "rejected":
+            return "declined"
+        case "invited", "sent":
+            return "invited"
+        default:
+            return cleaned.isEmpty ? "staged" : cleaned
+        }
+    }
+
+    private func crmGuestRecord(from guest: AppState.EventGuest) -> GuestRecord {
+        var record = GuestRecord(
+            id: stableCRMGuestUUID(id: guest.id, email: guest.email),
+            name: guest.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Guest" : guest.name,
+            email: guest.email,
+            organization: guest.organization,
+            role: guestRole(from: guest.role),
+            status: guestStatus(from: guest.invitationStatus),
+            isVIP: guest.isVIP || guestRole(from: guest.role) == .vip,
+            notes: guest.bio,
+            source: "crm",
+            createdAt: guest.createdAt ?? guest.invitedAt ?? Date()
+        )
+
+        record.bio = guest.bio
+        record.headshotURL = guest.headshotURL
+        record.featuredSpeaker = false
+
+        return record
+    }
+
+    private func guestRole(from rawValue: String) -> GuestRole {
+        let cleaned = rawValue
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "-", with: "_")
+            .replacingOccurrences(of: " ", with: "_")
+
+        switch cleaned {
+        case "speaker", "keynote_speaker", "panelist":
+            return .speaker
+        case "moderator", "host":
+            return .moderator
+        case "sponsor", "partner":
+            return .sponsor
+        case "vip":
+            return .vip
+        case "staff", "volunteer":
+            return .staff
+        case "attendee", "guest":
+            return .attendee
+        default:
+            return .delegate
+        }
+    }
+
+    private func guestStatus(from rawValue: String) -> GuestStatus {
+        switch normalizedInvitationStatus(rawValue) {
+        case "invited":
+            return .invited
+        case "accepted":
+            return .accepted
+        case "declined":
+            return .declined
+        case "checked_in":
+            return .checkedIn
+        case "staged":
+            return .staged
+        default:
+            return .manual
+        }
+    }
+
+    private func statusSortRank(_ status: GuestStatus) -> Int {
+        switch status {
+        case .checkedIn:
+            return 0
+        case .accepted:
+            return 1
+        case .invited:
+            return 2
+        case .staged:
+            return 3
+        case .manual:
+            return 4
+        case .declined:
+            return 5
+        }
+    }
+
+    private func normalizedEmail(_ rawValue: String) -> String {
+        rawValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private func stableCRMGuestUUID(id: String, email: String) -> UUID {
+        let seed = "\(id)|\(email)"
+        var hex = seed.unicodeScalars
+            .map { String(format: "%02x", Int($0.value) & 0xff) }
+            .joined()
+
+        if hex.count < 12 {
+            hex += String(repeating: "0", count: 12 - hex.count)
+        }
+
+        let suffix = String(hex.prefix(12))
+        return UUID(uuidString: "00000000-0000-0000-0000-\(suffix)") ?? UUID()
+    }
+
+    private func startLiveEventGuestsListener(for eventID: String) {
+        let cleanedID = eventID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanedID.isEmpty else { return }
+
+        if liveEventGuestsListener != nil, liveEventGuestsEventID == cleanedID {
+            return
+        }
+
+        stopLiveEventGuestsListener()
+        liveEventGuestsEventID = cleanedID
+        print("🧭 [EventManagementView] currentEvent.id:", currentEvent.id)
+        print("🧭 [EventManagementView] listening path: events/\(cleanedID)/guests")
+
+        liveEventGuestsListener = FirestoreService.db
+            .collection("events")
+            .document(cleanedID)
+            .collection("guests")
+            .addSnapshotListener { snapshot, error in
+                if let error {
+
+                        print("⚠️ [EventManagementView] Guest listener failed: \(error)")
+
+                        return
+
+                    }
+
+                    print("🧭 [EventManagementView] guest snapshot docs:", snapshot?.documents.count ?? -1)
+
+                    if let snapshot {
+
+                        for doc in snapshot.documents {
+
+                            print("🧭 [EventManagementView] guest doc:", doc.documentID, doc.data())
+
+                        }
+
+                    }
+
+                let guests: [AppState.EventGuest] = snapshot?.documents.compactMap { doc in
+                    let data = doc.data()
+
+                    return AppState.EventGuest(
+                        id: doc.documentID,
+                        eventID: data["eventId"] as? String ?? cleanedID,
+                        name: data["name"] as? String ?? "",
+                        email: data["email"] as? String ?? "",
+                        organization: data["organization"] as? String ?? "",
+                        bio: data["bio"] as? String ?? "",
+                        role: data["role"] as? String ?? "guest",
+                        isVIP: data["isVIP"] as? Bool ?? false,
+                        headshotURL: data["headshotURL"] as? String,
+                        invitationStatus: data["invitationStatus"] as? String ?? "staged",
+                        invitedAt: eventGuestDateValue(data["invitedAt"]),
+                        acceptedAt: eventGuestDateValue(data["acceptedAt"]),
+                        createdAt: eventGuestDateValue(data["createdAt"])
+                    )
+                } ?? []
+
+                Task { @MainActor in
+                    let sortedGuests = guests.sorted {
+                        $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+                    }
+
+                    self.liveEventGuests = sortedGuests
+
+                    print("🟢 [EventManagementView] Loaded CRM guests:", sortedGuests.count)
+
+                    for guest in sortedGuests {
+                        print(
+                            "🟢 CRM Guest:",
+                            guest.name,
+                            "| status:",
+                            guest.invitationStatus,
+                            "| role:",
+                            guest.role,
+                            "| email:",
+                            guest.email
+                        )
+                    }
+                }
+            }
+    }
+    private func stopLiveEventGuestsListener() {
+        liveEventGuestsListener?.remove()
+        liveEventGuestsListener = nil
+        liveEventGuestsEventID = ""
+        liveEventGuests = []
+    }
+
+    private func eventGuestDateValue(_ value: Any?) -> Date? {
+        if let timestamp = value as? Timestamp {
+            return timestamp.dateValue()
+        }
+
+        if let date = value as? Date {
+            return date
+        }
+
+        if let seconds = value as? TimeInterval {
+            return Date(timeIntervalSince1970: seconds)
+        }
+
+        if let iso = value as? String {
+            let formatter = ISO8601DateFormatter()
+            return formatter.date(from: iso)
+        }
+
+        return nil
     }
 
     private func crmMetric(_ title: String, _ value: Int, tint: Color) -> some View {
@@ -700,7 +1025,7 @@ struct EventManagementView: View {
         }
         .padding(16)
         .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Color.white.opacity(0.045)))
-        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(Color.white.opacity(0.09), lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(Color.white.opacity(0.16), lineWidth: 1))
     }
 
     private func controlButton(
@@ -763,7 +1088,7 @@ struct EventManagementView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .frame(height: 118)
             .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Color.white.opacity(0.045)))
-            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Color.white.opacity(0.09), lineWidth: 1))
+            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Color.white.opacity(0.16), lineWidth: 1))
         }
         .buttonStyle(.plain)
     }
@@ -818,6 +1143,9 @@ struct EventManagementView: View {
         switch command {
         case .invitationCenter, .guestPanel, .delegateDirectory, .staffRoles:
             bodyContent = AnyView(guestDirectoryPanel(command))
+
+        case .sessionBuilder:
+            bodyContent = AnyView(sessionBuilderPanel)
 
         default:
             bodyContent = AnyView(
@@ -892,7 +1220,7 @@ struct EventManagementView: View {
             }
         }
         .padding(16)
-        .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Color.white.opacity(0.055)))
+        .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Color.white.opacity(0.085)))
         .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Color.orange.opacity(0.14), lineWidth: 1))
     }
 
@@ -927,17 +1255,19 @@ struct EventManagementView: View {
     }
 
     private var guestQuickStats: some View {
-        VStack(spacing: 10) {
+        let records = directoryGuestRecords
+
+        return VStack(spacing: 10) {
             HStack(spacing: 10) {
-                commandMetric("PEOPLE", "\(guestRecords.count)")
+                commandMetric("PEOPLE", "\(records.count)")
                 commandMetric("STAGED", "\(stagedInviteCount)")
-                commandMetric("VIP", "\(guestRecords.filter { $0.isVIP || $0.role == .vip }.count)")
+                commandMetric("VIP", "\(records.filter { $0.isVIP || $0.role == .vip }.count)")
             }
 
             HStack(spacing: 10) {
-                commandMetric("ACCEPTED", "\(guestRecords.filter { $0.status == .accepted || $0.status == .checkedIn }.count)")
-                commandMetric("SPEAKERS", "\(guestRecords.filter { $0.role == .speaker }.count)")
-                commandMetric("STAFF", "\(guestRecords.filter { $0.role == .staff || $0.role == .moderator }.count)")
+                commandMetric("ACCEPTED", "\(records.filter { $0.status == .accepted || $0.status == .checkedIn }.count)")
+                commandMetric("SPEAKERS", "\(records.filter { $0.role == .speaker }.count)")
+                commandMetric("STAFF", "\(records.filter { $0.role == .staff || $0.role == .moderator }.count)")
             }
         }
     }
@@ -1028,18 +1358,18 @@ struct EventManagementView: View {
                 .tint(.orange)
                 .padding(12)
                 .frame(maxWidth: .infinity)
-                .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.white.opacity(0.055)))
-                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color.white.opacity(0.09), lineWidth: 1))
+                .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.white.opacity(0.085)))
+                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color.white.opacity(0.16), lineWidth: 1))
             }
 
             HStack(spacing: 10) {
                 Button { presentNativeContactPicker() } label: {
-                    commandActionLabel("IMPORT MORE CONTACTS", "person.crop.circle.badge.plus", filled: false)
+                    commandActionLabel("IMPORT", "person.crop.circle.badge.plus", filled: false)
                 }
                 .buttonStyle(.plain)
 
                 Button { stageSelectedContactsAsInvites() } label: {
-                    commandActionLabel(selectedContactIDs.isEmpty ? "SELECT CONTACTS" : "STAGE SELECTED", "paperplane.fill", filled: true)
+                    commandActionLabel(selectedContactIDs.isEmpty ? "SELECT" : "STAGE", "paperplane.fill", filled: true)
                 }
                 .buttonStyle(.plain)
                 .disabled(selectedContactIDs.isEmpty)
@@ -1100,7 +1430,7 @@ struct EventManagementView: View {
         }
         .padding(16)
         .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Color.white.opacity(0.045)))
-        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Color.white.opacity(0.09), lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Color.white.opacity(0.16), lineWidth: 1))
     }
 
     private func contactImportRow(_ contact: ContactCandidate) -> some View {
@@ -1275,12 +1605,12 @@ struct EventManagementView: View {
 
             TextEditor(text: $guestNotes)
                 .font(.system(size: 13, weight: .semibold, design: .rounded))
-                .foregroundColor(.white.opacity(0.88))
+                .foregroundColor(.white.opacity(0.98))
                 .scrollContentBackground(.hidden)
                 .frame(minHeight: 88)
                 .padding(10)
-                .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.white.opacity(0.055)))
-                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color.white.opacity(0.09), lineWidth: 1))
+                .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.white.opacity(0.085)))
+                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color.white.opacity(0.16), lineWidth: 1))
 
             HStack(spacing: 10) {
                 Button { addGuestRecord(asInvite: false) } label: {
@@ -1296,20 +1626,27 @@ struct EventManagementView: View {
         }
         .padding(16)
         .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Color.white.opacity(0.045)))
-        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Color.white.opacity(0.09), lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Color.white.opacity(0.16), lineWidth: 1))
     }
 
     private func premiumTextField(_ placeholder: String, text: Binding<String>) -> some View {
-        TextField(placeholder, text: text)
+        TextField("", text: text, prompt: Text(placeholder).foregroundColor(.white.opacity(0.62)))
             .textInputAutocapitalization(.words)
             .autocorrectionDisabled()
-            .font(.system(size: 14, weight: .bold, design: .rounded))
-            .foregroundColor(.white)
+            .font(.system(size: 15, weight: .heavy, design: .rounded))
+            .foregroundColor(.white.opacity(0.98))
             .tint(.orange)
-            .padding(.horizontal, 14)
-            .frame(height: 46)
-            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.white.opacity(0.055)))
-            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color.white.opacity(0.09), lineWidth: 1))
+            .padding(.horizontal, 16)
+            .frame(height: 54)
+            .background(
+                RoundedRectangle(cornerRadius: 17, style: .continuous)
+                    .fill(Color.white.opacity(0.12))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 17, style: .continuous)
+                    .stroke(Color.white.opacity(0.22), lineWidth: 1.15)
+            )
+            .shadow(color: .black.opacity(0.20), radius: 10, x: 0, y: 5)
     }
 
     private func pickerShell<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
@@ -1324,8 +1661,8 @@ struct EventManagementView: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity)
-        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.white.opacity(0.055)))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color.white.opacity(0.09), lineWidth: 1))
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.white.opacity(0.085)))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color.white.opacity(0.16), lineWidth: 1))
     }
 
     private var guestFilterRow: some View {
@@ -1381,7 +1718,7 @@ struct EventManagementView: View {
         }
         .padding(16)
         .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Color.white.opacity(0.045)))
-        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Color.white.opacity(0.09), lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Color.white.opacity(0.16), lineWidth: 1))
     }
 
     private func guestRow(_ guest: GuestRecord) -> some View {
@@ -1455,6 +1792,9 @@ struct EventManagementView: View {
         editGuestStatus = guest.status
         editGuestIsVIP = guest.isVIP || guest.role == .vip
         editingGuest = guest
+        editGuestBio = guest.bio
+        editGuestHeadshotURL = guest.headshotURL ?? ""
+        editGuestFeaturedSpeaker = guest.featuredSpeaker
     }
 
     private func guestEditSheetHost(_ guest: GuestRecord) -> AnyView {
@@ -1475,6 +1815,7 @@ struct EventManagementView: View {
                     guestEditHeader(guest)
                     guestEditSummary(guest)
                     guestEditForm
+                    speakerProfileEditor
                     guestEditActions(guest)
                 }
                 .padding(20)
@@ -1516,6 +1857,37 @@ struct EventManagementView: View {
         }
     }
 
+    private var speakerProfileEditor: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("SPEAKER PROFILE")
+                .font(.system(size: 10, weight: .black, design: .monospaced))
+                .foregroundColor(.orange.opacity(0.92))
+                .tracking(2)
+
+            premiumTextField("Headshot URL", text: $editGuestHeadshotURL)
+
+            Toggle(isOn: $editGuestFeaturedSpeaker) {
+                Text("FEATURED SPEAKER")
+                    .font(.system(size: 10, weight: .black, design: .monospaced))
+                    .foregroundColor(.white.opacity(0.76))
+                    .tracking(1)
+            }
+            .tint(.orange)
+
+            TextEditor(text: $editGuestBio)
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .foregroundColor(.white.opacity(0.98))
+                .scrollContentBackground(.hidden)
+                .frame(minHeight: 120)
+                .padding(10)
+                .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.white.opacity(0.085)))
+                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color.white.opacity(0.16), lineWidth: 1))
+        }
+        .padding(16)
+        .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Color.white.opacity(0.045)))
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Color.orange.opacity(0.12), lineWidth: 1))
+    }
+    
     private func guestEditSummary(_ guest: GuestRecord) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Keep roles, status, VIP priority, and notes editable after invitation so event admins can correct speaker/delegate assignments without removing the person.")
@@ -1530,7 +1902,7 @@ struct EventManagementView: View {
             }
         }
         .padding(16)
-        .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Color.white.opacity(0.055)))
+        .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Color.white.opacity(0.085)))
         .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Color.orange.opacity(0.14), lineWidth: 1))
     }
 
@@ -1577,16 +1949,16 @@ struct EventManagementView: View {
 
             TextEditor(text: $editGuestNotes)
                 .font(.system(size: 13, weight: .semibold, design: .rounded))
-                .foregroundColor(.white.opacity(0.88))
+                .foregroundColor(.white.opacity(0.98))
                 .scrollContentBackground(.hidden)
                 .frame(minHeight: 110)
                 .padding(10)
-                .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.white.opacity(0.055)))
-                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color.white.opacity(0.09), lineWidth: 1))
+                .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.white.opacity(0.085)))
+                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color.white.opacity(0.16), lineWidth: 1))
         }
         .padding(16)
         .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Color.white.opacity(0.045)))
-        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Color.white.opacity(0.09), lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Color.white.opacity(0.16), lineWidth: 1))
     }
 
     private func guestEditActions(_ guest: GuestRecord) -> some View {
@@ -1608,9 +1980,11 @@ struct EventManagementView: View {
 
     private func saveGuestEdits(_ guest: GuestRecord) {
         let name = editGuestName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let email = editGuestEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+        let email = editGuestEmail.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let organization = editGuestOrganization.trimmingCharacters(in: .whitespacesAndNewlines)
         let notes = editGuestNotes.trimmingCharacters(in: .whitespacesAndNewlines)
+        let bio = editGuestBio.trimmingCharacters(in: .whitespacesAndNewlines)
+        let headshotURL = editGuestHeadshotURL.trimmingCharacters(in: .whitespacesAndNewlines)
 
         guard !name.isEmpty else {
             app.showEventToast("NAME REQUIRED")
@@ -1622,12 +1996,7 @@ struct EventManagementView: View {
             return
         }
 
-        guard let index = guestRecords.firstIndex(where: { $0.id == guest.id }) else {
-            editingGuest = nil
-            return
-        }
-
-        var updated = guestRecords[index]
+        var updated = guest
         updated.name = name
         updated.email = email
         updated.organization = organization
@@ -1635,10 +2004,65 @@ struct EventManagementView: View {
         updated.role = editGuestRole
         updated.status = editGuestStatus
         updated.isVIP = editGuestIsVIP || editGuestRole == .vip
+        updated.bio = bio
+        updated.headshotURL = headshotURL.isEmpty ? nil : headshotURL
+        updated.featuredSpeaker = editGuestFeaturedSpeaker
 
-        guestRecords[index] = updated
-        editingGuest = nil
-        app.showEventToast("PERSON UPDATED")
+        if let index = guestRecords.firstIndex(where: { $0.id == guest.id }) {
+            guestRecords[index] = updated
+        }
+
+        let eventID = currentEvent.id.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !eventID.isEmpty else {
+            app.showEventToast("EVENT NOT FOUND")
+            return
+        }
+
+        let matchingCRMGuest = liveEventGuests.first {
+            normalizedEmail($0.email) == normalizedEmail(guest.email)
+        }
+
+        guard let crmGuest = matchingCRMGuest else {
+            app.showEventToast("CRM GUEST NOT FOUND")
+            return
+        }
+
+        var payload: [String: Any] = [
+            "name": name,
+            "email": email,
+            "organization": organization,
+            "notes": notes,
+            "bio": bio,
+            "role": editGuestRole.backendValue,
+            "isVIP": updated.isVIP,
+            "featuredSpeaker": editGuestFeaturedSpeaker,
+            "invitationStatus": editGuestStatus.backendValue,
+            "updatedAt": FieldValue.serverTimestamp()
+        ]
+
+        if headshotURL.isEmpty {
+            payload["headshotURL"] = FieldValue.delete()
+        } else {
+            payload["headshotURL"] = headshotURL
+        }
+
+        FirestoreService.db
+            .collection("events")
+            .document(eventID)
+            .collection("guests")
+            .document(crmGuest.id)
+            .setData(payload, merge: true) { error in
+                DispatchQueue.main.async {
+                    if let error {
+                        print("⚠️ [EventManagementView] Save CRM guest failed:", error)
+                        self.app.showEventToast("SAVE FAILED")
+                        return
+                    }
+
+                    self.editingGuest = nil
+                    self.app.showEventToast("PERSON SAVED")
+                }
+            }
     }
 
     private var guestExportActions: some View {
@@ -1747,11 +2171,11 @@ struct EventManagementView: View {
     }
 
     private func isContactAlreadyInDirectory(_ contact: ContactCandidate) -> Bool {
-        let email = contact.email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let email = normalizedEmail(contact.email)
         guard !email.isEmpty else { return false }
 
-        return guestRecords.contains {
-            $0.email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == email
+        return directoryGuestRecords.contains {
+            normalizedEmail($0.email) == email
         }
     }
 
@@ -2069,18 +2493,717 @@ struct EventManagementView: View {
         return .orange
     }
 
+
+    // MARK: - Session Builder
+
+    private var sessionSpeakerOptions: [AppState.EventGuest] {
+        currentCRMGuests.filter { guest in
+            let role = guest.role
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+                .replacingOccurrences(of: "-", with: "_")
+                .replacingOccurrences(of: " ", with: "_")
+
+            return role == "speaker" || role == "moderator" || role == "panelist" || role == "host"
+        }
+        .sorted { lhs, rhs in
+            lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+        }
+    }
+
+    private var sortedSessionRecords: [EventSession] {
+        sessionRecords.sorted { lhs, rhs in
+            if lhs.startsAt != rhs.startsAt { return lhs.startsAt < rhs.startsAt }
+            if lhs.featured != rhs.featured { return lhs.featured && !rhs.featured }
+            return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+        }
+    }
+
+    private var sessionBuilderPanel: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            sessionQuickStats
+            sessionCreatePanel
+            sessionListPanel
+        }
+    }
+
+    private var sessionQuickStats: some View {
+        let featuredCount = sessionRecords.filter { $0.featured }.count
+        let roomsCount = Set(sessionRecords.map { $0.room.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }.filter { !$0.isEmpty }).count
+        let tracksCount = Set(sessionRecords.map { $0.track.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }.filter { !$0.isEmpty }).count
+
+        return VStack(spacing: 10) {
+            HStack(spacing: 10) {
+                commandMetric("SESSIONS", "\(sessionRecords.count)")
+                commandMetric("FEATURED", "\(featuredCount)")
+                commandMetric("SPEAKERS", "\(sessionSpeakerOptions.count)")
+            }
+
+            HStack(spacing: 10) {
+                commandMetric("ROOMS", "\(roomsCount)")
+                commandMetric("TRACKS", "\(tracksCount)")
+                commandMetric("STATUS", sessionRecords.isEmpty ? "DRAFT" : "LIVE")
+            }
+        }
+    }
+
+    private var sessionCreatePanel: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("CREATE SESSION")
+                .font(.system(size: 10, weight: .black, design: .monospaced))
+                .foregroundColor(.orange.opacity(0.92))
+                .tracking(2)
+
+            premiumTextField("Session title", text: $sessionTitle)
+
+            TextEditor(text: $sessionDescription)
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .foregroundColor(.white.opacity(0.98))
+                .scrollContentBackground(.hidden)
+                .frame(minHeight: 96)
+                .padding(10)
+                .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.white.opacity(0.12)))
+                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color.white.opacity(0.22), lineWidth: 1.1))
+
+            premiumTextField("Room", text: $sessionRoom)
+            premiumTextField("Track", text: $sessionTrack)
+
+            VStack(alignment: .leading, spacing: 10) {
+                sessionDatePickerCard(title: "START", selection: $sessionStartsAt)
+                sessionDatePickerCard(title: "END", selection: $sessionEndsAt)
+            }
+
+            premiumTextField("Capacity", text: $sessionCapacityText)
+                .keyboardType(.numberPad)
+
+            sessionFeaturedToggle(isOn: $sessionFeatured)
+
+            sessionSpeakerPicker(selectedIDs: $selectedSessionSpeakerIDs)
+
+            Button { saveNewSession() } label: {
+                commandActionLabel(isSavingSession ? "SAVING SESSION" : "CREATE SESSION", "plus.circle.fill", filled: true)
+            }
+            .buttonStyle(.plain)
+            .disabled(isSavingSession)
+            .opacity(isSavingSession ? 0.55 : 1)
+        }
+        .padding(16)
+        .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Color.white.opacity(0.045)))
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Color.orange.opacity(0.12), lineWidth: 1))
+    }
+
+    private var sessionListPanel: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("SESSION AGENDA")
+                    .font(.system(size: 10, weight: .black, design: .monospaced))
+                    .foregroundColor(.orange.opacity(0.92))
+                    .tracking(2)
+
+                Spacer()
+
+                Text("\(sessionRecords.count) TOTAL")
+                    .font(.system(size: 8, weight: .black, design: .monospaced))
+                    .foregroundColor(.white.opacity(0.46))
+            }
+
+            if sortedSessionRecords.isEmpty {
+                VStack(spacing: 10) {
+                    Image(systemName: "rectangle.3.group.fill")
+                        .font(.system(size: 24, weight: .black))
+                        .foregroundColor(.orange.opacity(0.72))
+
+                    Text("NO SESSIONS YET")
+                        .font(.system(size: 11, weight: .black, design: .monospaced))
+                        .foregroundColor(.white.opacity(0.72))
+                        .tracking(1)
+
+                    Text("Create a keynote, panel, workshop, networking block, or event segment.")
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundColor(.white.opacity(0.44))
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 24)
+            } else {
+                VStack(spacing: 10) {
+                    ForEach(sortedSessionRecords) { session in
+                        sessionRow(session)
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Color.white.opacity(0.045)))
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Color.white.opacity(0.16), lineWidth: 1))
+    }
+
+    private func sessionRow(_ session: EventSession) -> some View {
+        Button { beginEditingSession(session) } label: {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(spacing: 4) {
+                    Text(sessionTime(session.startsAt))
+                        .font(.system(size: 11, weight: .black, design: .monospaced))
+                        .foregroundColor(.orange.opacity(0.92))
+                    Text(sessionTime(session.endsAt))
+                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .foregroundColor(.white.opacity(0.40))
+                }
+                .frame(width: 54, alignment: .leading)
+
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(spacing: 8) {
+                        Text(session.title.isEmpty ? "Untitled Session" : session.title)
+                            .font(.system(size: 13, weight: .black, design: .rounded))
+                            .foregroundColor(.white.opacity(0.92))
+                            .lineLimit(2)
+
+                        if session.featured {
+                            Text("FEATURED")
+                                .font(.system(size: 7, weight: .black, design: .monospaced))
+                                .foregroundColor(.black.opacity(0.88))
+                                .padding(.horizontal, 6)
+                                .frame(height: 18)
+                                .background(Capsule().fill(Color.orange.opacity(0.96)))
+                        }
+                    }
+
+                    Text("\(session.track.uppercased()) • \(session.room.uppercased())")
+                        .font(.system(size: 9, weight: .black, design: .monospaced))
+                        .foregroundColor(.white.opacity(0.46))
+                        .tracking(0.6)
+                        .lineLimit(1)
+
+                    if !sessionSpeakerNames(for: session).isEmpty {
+                        Text(sessionSpeakerNames(for: session))
+                            .font(.system(size: 10, weight: .semibold, design: .rounded))
+                            .foregroundColor(.orange.opacity(0.70))
+                            .lineLimit(2)
+                    }
+
+                    if !session.description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text(session.description)
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .foregroundColor(.white.opacity(0.48))
+                            .lineLimit(3)
+                    }
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .black))
+                    .foregroundColor(.white.opacity(0.26))
+            }
+            .padding(12)
+            .background(RoundedRectangle(cornerRadius: 17, style: .continuous).fill(Color.black.opacity(0.34)))
+            .overlay(RoundedRectangle(cornerRadius: 17, style: .continuous).stroke(Color.white.opacity(0.055), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+    }
+
+    
+    private func sessionDatePickerCard(
+        title: String,
+        selection: Binding<Date>
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .font(.system(size: 8, weight: .black, design: .monospaced))
+                .foregroundColor(.orange.opacity(0.92))
+                .tracking(1.1)
+
+            DatePicker("", selection: selection, displayedComponents: [.date, .hourAndMinute])
+                .labelsHidden()
+                .datePickerStyle(.compact)
+                .tint(.orange)
+                .colorScheme(.dark)
+                .padding(.horizontal, 12)
+                .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: 15, style: .continuous)
+                        .fill(Color.white.opacity(0.14))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 15, style: .continuous)
+                        .stroke(Color.white.opacity(0.20), lineWidth: 1)
+                )
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.white.opacity(0.12)))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color.white.opacity(0.13), lineWidth: 1))
+    }
+
+    private func sessionFeaturedToggle(isOn: Binding<Bool>) -> some View {
+        Toggle(isOn: isOn) {
+            Text("FEATURED SESSION")
+                .font(.system(size: 10, weight: .black, design: .monospaced))
+                .foregroundColor(.white.opacity(0.76))
+                .tracking(1)
+        }
+        .tint(.orange)
+        .padding(12)
+        .frame(maxWidth: .infinity)
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.white.opacity(0.085)))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color.white.opacity(0.16), lineWidth: 1))
+    }
+
+private func sessionSpeakerPicker(selectedIDs: Binding<Set<String>>) -> some View {
+        VStack(alignment: .leading, spacing: 9) {
+            Text("ASSIGN SPEAKERS")
+                .font(.system(size: 8, weight: .black, design: .monospaced))
+                .foregroundColor(.orange.opacity(0.82))
+                .tracking(1)
+
+            sessionSpeakerPickerContent(selectedIDs: selectedIDs)
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.white.opacity(0.045))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.white.opacity(0.16), lineWidth: 1)
+        )
+    }
+
+    @ViewBuilder
+    private func sessionSpeakerPickerContent(selectedIDs: Binding<Set<String>>) -> some View {
+        if sessionSpeakerOptions.isEmpty {
+            sessionSpeakerEmptyState
+        } else {
+            VStack(spacing: 8) {
+                ForEach(sessionSpeakerOptions) { speaker in
+                    sessionSpeakerPickerRow(speaker: speaker, selectedIDs: selectedIDs)
+                }
+            }
+        }
+    }
+
+    private var sessionSpeakerEmptyState: some View {
+        Text("No accepted speakers or moderators yet. Add speakers in Speaker Management first.")
+            .font(.system(size: 11, weight: .semibold, design: .rounded))
+            .foregroundColor(.white.opacity(0.42))
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func sessionSpeakerPickerRow(
+        speaker: AppState.EventGuest,
+        selectedIDs: Binding<Set<String>>
+    ) -> some View {
+        let isSelected = selectedIDs.wrappedValue.contains(speaker.id)
+
+        return Button {
+            toggleSessionSpeaker(speaker.id, selectedIDs: selectedIDs)
+        } label: {
+            sessionSpeakerPickerRowContent(speaker: speaker, isSelected: isSelected)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func sessionSpeakerPickerRowContent(
+        speaker: AppState.EventGuest,
+        isSelected: Bool
+    ) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                .font(.system(size: 14, weight: .black))
+                .foregroundColor(isSelected ? .green.opacity(0.94) : .white.opacity(0.32))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(speaker.name.isEmpty ? "Speaker" : speaker.name)
+                    .font(.system(size: 11, weight: .black, design: .rounded))
+                    .foregroundColor(.white.opacity(0.98))
+
+                Text(speaker.role.uppercased())
+                    .font(.system(size: 8, weight: .black, design: .monospaced))
+                    .foregroundColor(.white.opacity(0.40))
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(10)
+        .background(sessionSpeakerRowBackground(isSelected: isSelected))
+        .overlay(sessionSpeakerRowStroke(isSelected: isSelected))
+    }
+
+    private func sessionSpeakerRowBackground(isSelected: Bool) -> some View {
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .fill(isSelected ? Color.green.opacity(0.09) : Color.black.opacity(0.28))
+    }
+
+    private func sessionSpeakerRowStroke(isSelected: Bool) -> some View {
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .stroke(isSelected ? Color.green.opacity(0.18) : Color.white.opacity(0.06), lineWidth: 1)
+    }
+
+    private func toggleSessionSpeaker(
+        _ speakerID: String,
+        selectedIDs: Binding<Set<String>>
+    ) {
+        if selectedIDs.wrappedValue.contains(speakerID) {
+            selectedIDs.wrappedValue.remove(speakerID)
+        } else {
+            selectedIDs.wrappedValue.insert(speakerID)
+        }
+    }
+
+    private func beginEditingSession(_ session: EventSession) {
+        editSessionTitle = session.title
+        editSessionDescription = session.description
+        editSessionRoom = session.room
+        editSessionTrack = session.track
+        editSessionStartsAt = session.startsAt
+        editSessionEndsAt = session.endsAt
+        editSessionCapacityText = session.capacity > 0 ? "\(session.capacity)" : ""
+        editSessionFeatured = session.featured
+        editSessionStatus = session.status
+        editSessionSpeakerIDs = Set(session.speakerIDs)
+        editingSession = session
+    }
+
+    private func sessionEditSheetHost(_ session: EventSession) -> AnyView {
+        AnyView(
+            sessionEditSheet(session)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+                .presentationCornerRadius(28)
+        )
+    }
+
+    private func sessionEditSheet(_ session: EventSession) -> some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 18) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "rectangle.3.group.fill")
+                            .font(.system(size: 18, weight: .black))
+                            .foregroundColor(.orange.opacity(0.96))
+                            .frame(width: 46, height: 46)
+                            .background(Circle().fill(Color.orange.opacity(0.13)))
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("EDIT SESSION")
+                                .font(.system(size: 15, weight: .black, design: .monospaced))
+                                .foregroundColor(.white)
+                                .tracking(1)
+
+                            Text(currentEvent.title)
+                                .font(.system(size: 12, weight: .bold, design: .rounded))
+                                .foregroundColor(.white.opacity(0.50))
+                                .lineLimit(2)
+                        }
+
+                        Spacer()
+
+                        Button { editingSession = nil } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 12, weight: .black))
+                                .foregroundColor(.white.opacity(0.78))
+                                .frame(width: 34, height: 34)
+                                .background(Circle().fill(Color.white.opacity(0.09)))
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("SESSION DETAILS")
+                            .font(.system(size: 10, weight: .black, design: .monospaced))
+                            .foregroundColor(.orange.opacity(0.92))
+                            .tracking(2)
+
+                        premiumTextField("Session title", text: $editSessionTitle)
+
+                        TextEditor(text: $editSessionDescription)
+                            .font(.system(size: 13, weight: .semibold, design: .rounded))
+                            .foregroundColor(.white.opacity(0.98))
+                            .scrollContentBackground(.hidden)
+                            .frame(minHeight: 110)
+                            .padding(10)
+                            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.white.opacity(0.12)))
+                            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color.white.opacity(0.22), lineWidth: 1.1))
+
+                        premiumTextField("Room", text: $editSessionRoom)
+                        premiumTextField("Track", text: $editSessionTrack)
+
+                        VStack(alignment: .leading, spacing: 10) {
+                            sessionDatePickerCard(title: "START", selection: $editSessionStartsAt)
+                            sessionDatePickerCard(title: "END", selection: $editSessionEndsAt)
+                        }
+
+                        premiumTextField("Capacity", text: $editSessionCapacityText)
+                            .keyboardType(.numberPad)
+
+                        sessionFeaturedToggle(isOn: $editSessionFeatured)
+
+                        sessionSpeakerPicker(selectedIDs: $editSessionSpeakerIDs)
+                    }
+                    .padding(16)
+                    .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Color.white.opacity(0.045)))
+                    .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Color.orange.opacity(0.12), lineWidth: 1))
+
+                    Button { saveExistingSession(session) } label: {
+                        commandActionLabel(isSavingSession ? "SAVING SESSION" : "SAVE SESSION", "checkmark.seal.fill", filled: true)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isSavingSession)
+                    .opacity(isSavingSession ? 0.55 : 1)
+
+                    Button { deleteSession(session) } label: {
+                        commandActionLabel("DELETE SESSION", "trash.fill", filled: false)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(20)
+                .padding(.bottom, 24)
+            }
+        }
+    }
+
+    private func saveNewSession() {
+        let title = sessionTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let description = sessionDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        let room = sessionRoom.trimmingCharacters(in: .whitespacesAndNewlines)
+        let track = sessionTrack.trimmingCharacters(in: .whitespacesAndNewlines)
+        let capacity = Int(sessionCapacityText.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
+        let eventID = currentEvent.id.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !eventID.isEmpty else {
+            app.showEventToast("EVENT NOT FOUND")
+            return
+        }
+
+        guard !title.isEmpty else {
+            app.showEventToast("SESSION TITLE REQUIRED")
+            return
+        }
+
+        guard sessionEndsAt > sessionStartsAt else {
+            app.showEventToast("END AFTER START")
+            return
+        }
+
+        isSavingSession = true
+
+        let ref = FirestoreService.db
+            .collection("events")
+            .document(eventID)
+            .collection("sessions")
+            .document()
+
+        let payload: [String: Any] = [
+            "id": ref.documentID,
+            "eventId": eventID,
+            "title": title,
+            "description": description,
+            "speakerIDs": Array(selectedSessionSpeakerIDs),
+            "room": room.isEmpty ? "Main Stage" : room,
+            "track": track.isEmpty ? "General" : track,
+            "startsAt": Timestamp(date: sessionStartsAt),
+            "endsAt": Timestamp(date: sessionEndsAt),
+            "capacity": max(0, capacity),
+            "featured": sessionFeatured,
+            "status": sessionStatus,
+            "createdAt": FieldValue.serverTimestamp(),
+            "updatedAt": FieldValue.serverTimestamp()
+        ]
+
+        ref.setData(payload, merge: true) { error in
+            DispatchQueue.main.async {
+                self.isSavingSession = false
+
+                if let error {
+                    print("⚠️ [EventManagementView] Save session failed:", error)
+                    self.app.showEventToast("SESSION SAVE FAILED")
+                    return
+                }
+
+                self.sessionTitle = ""
+                self.sessionDescription = ""
+                self.sessionRoom = "Main Stage"
+                self.sessionTrack = "General"
+                self.sessionStartsAt = Date()
+                self.sessionEndsAt = Date().addingTimeInterval(3600)
+                self.sessionCapacityText = ""
+                self.sessionFeatured = false
+                self.sessionStatus = "draft"
+                self.selectedSessionSpeakerIDs = []
+                self.app.showEventToast("SESSION CREATED")
+            }
+        }
+    }
+
+    private func saveExistingSession(_ session: EventSession) {
+        let title = editSessionTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let description = editSessionDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        let room = editSessionRoom.trimmingCharacters(in: .whitespacesAndNewlines)
+        let track = editSessionTrack.trimmingCharacters(in: .whitespacesAndNewlines)
+        let capacity = Int(editSessionCapacityText.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
+        let eventID = currentEvent.id.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !eventID.isEmpty else {
+            app.showEventToast("EVENT NOT FOUND")
+            return
+        }
+
+        guard !title.isEmpty else {
+            app.showEventToast("SESSION TITLE REQUIRED")
+            return
+        }
+
+        guard editSessionEndsAt > editSessionStartsAt else {
+            app.showEventToast("END AFTER START")
+            return
+        }
+
+        let payload: [String: Any] = [
+            "id": session.id,
+            "eventId": eventID,
+            "title": title,
+            "description": description,
+            "speakerIDs": Array(editSessionSpeakerIDs),
+            "room": room.isEmpty ? "Main Stage" : room,
+            "track": track.isEmpty ? "General" : track,
+            "startsAt": Timestamp(date: editSessionStartsAt),
+            "endsAt": Timestamp(date: editSessionEndsAt),
+            "capacity": max(0, capacity),
+            "featured": editSessionFeatured,
+            "status": editSessionStatus,
+            "updatedAt": FieldValue.serverTimestamp()
+        ]
+
+        FirestoreService.db
+            .collection("events")
+            .document(eventID)
+            .collection("sessions")
+            .document(session.id)
+            .setData(payload, merge: true) { error in
+                DispatchQueue.main.async {
+                    if let error {
+                        print("⚠️ [EventManagementView] Update session failed:", error)
+                        self.app.showEventToast("SESSION SAVE FAILED")
+                        return
+                    }
+
+                    self.editingSession = nil
+                    self.app.showEventToast("SESSION SAVED")
+                }
+            }
+    }
+
+    private func deleteSession(_ session: EventSession) {
+        let eventID = currentEvent.id.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !eventID.isEmpty else {
+            app.showEventToast("EVENT NOT FOUND")
+            return
+        }
+
+        FirestoreService.db
+            .collection("events")
+            .document(eventID)
+            .collection("sessions")
+            .document(session.id)
+            .delete { error in
+                DispatchQueue.main.async {
+                    if let error {
+                        print("⚠️ [EventManagementView] Delete session failed:", error)
+                        self.app.showEventToast("DELETE FAILED")
+                        return
+                    }
+
+                    self.editingSession = nil
+                    self.app.showEventToast("SESSION DELETED")
+                }
+            }
+    }
+
+    private func startLiveEventSessionsListener(for eventID: String) {
+        let cleanedID = eventID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanedID.isEmpty else { return }
+
+        if liveEventSessionsListener != nil, liveEventSessionsEventID == cleanedID {
+            return
+        }
+
+        stopLiveEventSessionsListener()
+        liveEventSessionsEventID = cleanedID
+
+        liveEventSessionsListener = FirestoreService.db
+            .collection("events")
+            .document(cleanedID)
+            .collection("sessions")
+            .order(by: "startsAt", descending: false)
+            .addSnapshotListener { snapshot, error in
+                if let error {
+                    print("⚠️ [EventManagementView] Session listener failed: \(error)")
+                    return
+                }
+
+                let sessions: [EventSession] = snapshot?.documents.compactMap { doc in
+                    let data = doc.data()
+                    let startsAt = self.eventGuestDateValue(data["startsAt"]) ?? Date()
+                    let endsAt = self.eventGuestDateValue(data["endsAt"]) ?? startsAt.addingTimeInterval(3600)
+
+                    return EventSession(
+                        id: data["id"] as? String ?? doc.documentID,
+                        title: data["title"] as? String ?? "Untitled Session",
+                        description: data["description"] as? String ?? "",
+                        speakerIDs: data["speakerIDs"] as? [String] ?? [],
+                        room: data["room"] as? String ?? "Main Stage",
+                        track: data["track"] as? String ?? "General",
+                        startsAt: startsAt,
+                        endsAt: endsAt,
+                        capacity: data["capacity"] as? Int ?? 0,
+                        featured: data["featured"] as? Bool ?? false,
+                        status: data["status"] as? String ?? "draft"
+                    )
+                } ?? []
+
+                Task { @MainActor in
+                    self.sessionRecords = sessions
+                }
+            }
+    }
+
+    private func stopLiveEventSessionsListener() {
+        liveEventSessionsListener?.remove()
+        liveEventSessionsListener = nil
+        liveEventSessionsEventID = ""
+        sessionRecords = []
+    }
+
+    private func sessionSpeakerNames(for session: EventSession) -> String {
+        let names = session.speakerIDs.compactMap { speakerID in
+            currentCRMGuests.first(where: { $0.id == speakerID })?.name
+        }
+
+        return names.joined(separator: ", ")
+    }
+
+    private func sessionTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "h:mm a"
+        return formatter.string(from: date)
+    }
+
     private func guestDirectoryExport() -> String {
         var lines: [String] = []
         lines.append("Guest / Delegate Directory — \(currentEvent.title)")
         lines.append(eventDateLine(currentEvent))
         lines.append("")
 
-        if guestRecords.isEmpty {
+        let records = directoryGuestRecords
+
+        if records.isEmpty {
             lines.append("No guests added yet.")
             return lines.joined(separator: "\n")
         }
 
-        for guest in guestRecords {
+        for guest in records {
             lines.append("• \(guest.name)")
             lines.append("  Role: \(guest.role.rawValue)")
             lines.append("  Status: \(guest.status.rawValue)")
@@ -2104,12 +3227,12 @@ struct EventManagementView: View {
 
             TextEditor(text: $commandNotes)
                 .font(.system(size: 14, weight: .semibold, design: .rounded))
-                .foregroundColor(.white.opacity(0.90))
+                .foregroundColor(.white.opacity(0.98))
                 .scrollContentBackground(.hidden)
                 .frame(minHeight: 160)
                 .padding(12)
                 .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.white.opacity(0.06)))
-                .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color.white.opacity(0.09), lineWidth: 1))
+                .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color.white.opacity(0.16), lineWidth: 1))
         }
     }
 
@@ -2407,6 +3530,31 @@ private struct ContactPickerSheet: UIViewControllerRepresentable {
     }
 }
 
+
+
+
+
+
+
+
+// MARK: - Session Builder Foundation
+
+extension EventManagementView {
+
+    struct EventSession: Identifiable, Hashable {
+        var id: String
+        var title: String
+        var description: String
+        var speakerIDs: [String]
+        var room: String
+        var track: String
+        var startsAt: Date
+        var endsAt: Date
+        var capacity: Int
+        var featured: Bool
+        var status: String
+    }
+}
 
 
 
