@@ -4428,6 +4428,516 @@ export const sendEventInvitations = onCall(
   }
 );
 
+type EventCommunicationAudience =
+  | "all"
+  | "accepted"
+  | "invited"
+  | "waitlist"
+  | "checked_in"
+  | "vip"
+  | "speakers";
+
+type EventCommunicationTemplate =
+  | "reminder"
+  | "final_call"
+  | "venue_change"
+  | "schedule_update"
+  | "check_in_instructions"
+  | "thank_you"
+  | "custom";
+
+type EventCommunicationRecipient = {
+  guestId: string;
+  email: string;
+  name: string;
+  role: string;
+  status: string;
+  isVIP: boolean;
+  organization?: string;
+};
+
+/**
+ * Normalizes event communication audience values.
+ * @param {unknown} value - Raw audience value.
+ * @return {EventCommunicationAudience} Safe audience value.
+ */
+function normalizeEventCommunicationAudience(value: unknown): EventCommunicationAudience {
+  const cleaned = asTrimmedString(value)
+    .toLowerCase()
+    .replace(/[-\s]+/g, "_");
+
+  switch (cleaned) {
+  case "all":
+  case "accepted":
+  case "invited":
+  case "waitlist":
+  case "checked_in":
+  case "vip":
+  case "speakers":
+    return cleaned;
+  case "checkedin":
+    return "checked_in";
+  case "speaker":
+    return "speakers";
+  default:
+    return "accepted";
+  }
+}
+
+/**
+ * Normalizes event communication template values.
+ * @param {unknown} value - Raw template value.
+ * @return {EventCommunicationTemplate} Safe template value.
+ */
+function normalizeEventCommunicationTemplate(value: unknown): EventCommunicationTemplate {
+  const cleaned = asTrimmedString(value)
+    .toLowerCase()
+    .replace(/[-\s]+/g, "_");
+
+  switch (cleaned) {
+  case "reminder":
+  case "final_call":
+  case "venue_change":
+  case "schedule_update":
+  case "check_in_instructions":
+  case "thank_you":
+  case "custom":
+    return cleaned;
+  default:
+    return "custom";
+  }
+}
+
+/**
+ * Normalizes guest invitation status values.
+ * @param {unknown} value - Raw status.
+ * @return {string} Normalized status.
+ */
+function normalizeEventGuestStatus(value: unknown): string {
+  const cleaned = asTrimmedString(value)
+    .toLowerCase()
+    .replace(/[-\s]+/g, "_");
+
+  switch (cleaned) {
+  case "accepted":
+  case "confirmed":
+  case "rsvp":
+  case "rsvped":
+    return "accepted";
+  case "invited":
+  case "sent":
+    return "invited";
+  case "declined":
+  case "rejected":
+    return "declined";
+  case "checkedin":
+  case "checked_in":
+    return "checked_in";
+  case "waitlist":
+  case "waitlisted":
+  case "waiting":
+    return "waitlist";
+  default:
+    return cleaned || "staged";
+  }
+}
+
+/**
+ * Normalizes event role values for communication filters.
+ * @param {unknown} value - Raw role.
+ * @return {string} Normalized role.
+ */
+function normalizeEventCommunicationRole(value: unknown): string {
+  return asTrimmedString(value)
+    .toLowerCase()
+    .replace(/[-\s]+/g, "_");
+}
+
+/**
+ * Checks whether a caller can run Event CRM communications.
+ * @param {CallableRequest} request - Callable request.
+ * @param {Record<string, unknown>} eventData - Event data.
+ * @return {boolean} Access result.
+ */
+function canManageEventCommunication(
+  request: CallableRequest,
+  eventData: Record<string, unknown>
+): boolean {
+  const uid = request.auth?.uid ?? "";
+  const requesterEmail = asTrimmedString(request.auth?.token?.email).toLowerCase();
+
+  if (!uid) return false;
+  if (uid === OWNER_UID) return true;
+  if (requesterEmail === "bravatech4226@gmail.com") return true;
+
+  const managerUIDs = [
+    eventData.createdBy,
+    eventData.organizerUID,
+    eventData.organizerUid,
+    eventData.submittedByUID,
+    eventData.submittedByUid,
+    eventData.updatedBy,
+  ].map(asTrimmedString).filter(Boolean);
+
+  return managerUIDs.includes(uid);
+}
+
+/**
+ * Builds Event CRM communication HTML.
+ * @param {string} eventTitle - Event title.
+ * @param {string} subject - Email subject.
+ * @param {string} body - Plain body content.
+ * @return {string} HTML email body.
+ */
+function buildEventCommunicationEmailHtml(
+  eventTitle: string,
+  subject: string,
+  body: string
+): string {
+  const safeEventTitle = escapeHtml(eventTitle);
+  const safeSubject = escapeHtml(subject);
+  const paragraphs = body
+    .split(/\n{2,}/)
+    .map((chunk) => chunk.trim())
+    .filter(Boolean)
+    .map((chunk) =>
+      `<p style="margin: 0 0 16px;">${escapeHtml(chunk).replace(/\n/g, "<br />")}</p>`
+    )
+    .join("\n");
+
+  return `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #111827; max-width: 640px; margin: 0 auto;">
+      <div style="border: 1px solid #fed7aa; border-radius: 18px; padding: 24px; background: #fff7ed; margin-bottom: 24px;">
+        <p style="margin: 0 0 6px; color: #f97316; font-size: 12px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase;">
+          Trivia GOAT Event Update
+        </p>
+        <h1 style="margin: 0; color: #111827; font-size: 24px; line-height: 1.2; font-weight: 900;">
+          ${safeSubject}
+        </h1>
+        <p style="margin: 12px 0 0; color: #6b7280; font-size: 14px;">
+          ${safeEventTitle}
+        </p>
+      </div>
+
+      <div style="font-size: 16px; color: #111827;">
+        ${paragraphs}
+      </div>
+
+      <hr style="border: 0; border-top: 1px solid #e5e7eb; margin: 32px 0;" />
+
+      <p style="font-size: 12px; color: #9ca3af; margin: 0;">
+        Sent from Trivia GOAT Event CRM.
+      </p>
+    </div>
+  `.trim();
+}
+
+/**
+ * Resolves Event CRM communication recipients.
+ * @param {string} eventId - Event ID.
+ * @param {EventCommunicationAudience} audience - Audience filter.
+ * @return {Promise<EventCommunicationRecipient[]>} Recipients.
+ */
+async function resolveEventCommunicationRecipients(
+  eventId: string,
+  audience: EventCommunicationAudience
+): Promise<EventCommunicationRecipient[]> {
+  const guestSnap = await db
+    .collection("events")
+    .doc(eventId)
+    .collection("guests")
+    .limit(500)
+    .get();
+
+  const recipients: EventCommunicationRecipient[] = guestSnap.docs
+    .map((doc): EventCommunicationRecipient => {
+      const data = doc.data();
+      const email = asTrimmedString(data.email).toLowerCase();
+      const name = cleanDisplayName(data.name || email.split("@")[0]);
+      const role = normalizeEventCommunicationRole(data.role);
+      const status = normalizeEventGuestStatus(data.invitationStatus);
+      const isVIP = data.isVIP === true || role === "vip";
+      const organization = asTrimmedString(data.organization);
+
+      return {
+        guestId: doc.id,
+        email,
+        name,
+        role,
+        status,
+        isVIP,
+        organization,
+      };
+    })
+    .filter((recipient) => recipient.email && isValidEmail(recipient.email))
+    .filter((recipient) => {
+      switch (audience) {
+      case "all":
+        return true;
+      case "accepted":
+        return recipient.status === "accepted" || recipient.status === "checked_in";
+      case "invited":
+        return recipient.status === "invited";
+      case "waitlist":
+        return recipient.status === "waitlist" || recipient.status === "waiting";
+      case "checked_in":
+        return recipient.status === "checked_in";
+      case "vip":
+        return recipient.isVIP;
+      case "speakers":
+        return ["speaker", "moderator", "panelist", "host", "keynote_speaker"].includes(
+          recipient.role
+        );
+      default:
+        return false;
+      }
+    });
+
+  return Array.from(new Map(recipients.map((item) => [item.email, item])).values());
+}
+
+/**
+ * Returns first usable name token for a recipient.
+ * @param {string} name - Full recipient name.
+ * @return {string} First name fallback.
+ */
+function eventCommunicationFirstName(name: string): string {
+  const cleaned = asTrimmedString(name);
+  if (!cleaned) return "there";
+  return cleaned.split(/\s+/)[0] || cleaned;
+}
+
+/**
+ * Renders per-recipient event communication body tokens.
+ * @param {string} body - Message body template.
+ * @param {string} eventTitle - Event title.
+ * @param {EventCommunicationRecipient} recipient - Recipient.
+ * @return {string} Personalized body.
+ */
+function personalizeEventCommunicationBody(
+  body: string,
+  eventTitle: string,
+  recipient: EventCommunicationRecipient
+): string {
+  const fullName = asTrimmedString(recipient.name) || "there";
+  const firstName = eventCommunicationFirstName(fullName);
+  const role = asTrimmedString(recipient.role).replace(/_/g, " ");
+  const organization = asTrimmedString(recipient.organization);
+
+  let rendered = body
+    .replace(/\{\{\s*firstName\s*\}\}/gi, firstName)
+    .replace(/\{\{\s*fullName\s*\}\}/gi, fullName)
+    .replace(/\{\{\s*eventTitle\s*\}\}/gi, eventTitle)
+    .replace(/\{\{\s*role\s*\}\}/gi, role)
+    .replace(/\{\{\s*organization\s*\}\}/gi, organization);
+
+  if (/^Hi,\s*$/im.test(rendered)) {
+    rendered = rendered.replace(/^Hi,\s*$/im, `Hi ${firstName},`);
+  }
+
+  return rendered;
+}
+
+/**
+ * Sends an Event CRM communication email using the existing mail transport.
+ * @param {string} toEmail - Recipient email.
+ * @param {string} eventTitle - Event title.
+ * @param {string} subject - Email subject.
+ * @param {string} body - Plain body.
+ * @return {Promise<void>} Completion promise.
+ */
+async function sendEventCommunicationEmail(
+  toEmail: string,
+  eventTitle: string,
+  subject: string,
+  body: string
+): Promise<void> {
+  const resend = new Resend(RESEND_API_KEY.value());
+
+  await resend.emails.send({
+    from: RESEND_FROM_EMAIL.value(),
+    to: [toEmail],
+    subject,
+    html: buildEventCommunicationEmailHtml(eventTitle, subject, body),
+    text: body,
+  });
+}
+
+/**
+ * Sends a CRM communication directly from the current event mail transport.
+ * @param {CallableRequest} request - Callable request.
+ * @return {Promise<object>} Send result.
+ */
+export const sendEventCommunication = onCall(
+  { secrets: [RESEND_API_KEY, RESEND_FROM_EMAIL] },
+  async (request: CallableRequest): Promise<object> => {
+    const data = (request.data ?? {}) as Record<string, unknown>;
+    const eventId = asTrimmedString(data.eventId);
+    const audience = normalizeEventCommunicationAudience(data.audience);
+    const template = normalizeEventCommunicationTemplate(data.template);
+    const subject = asTrimmedString(data.subject).slice(0, 180);
+    const body = asTrimmedString(data.body).slice(0, 8000);
+    const testMode = data.testMode === true;
+    const mode = asTrimmedString(data.mode).toLowerCase() === "individual" ? "individual" : "audience";
+    const recipientGuestId = asTrimmedString(data.recipientGuestId);
+    const recipientEmail = asTrimmedString(data.recipientEmail).toLowerCase();
+    const recipientName = cleanDisplayName(data.recipientName || recipientEmail.split("@")[0]);
+    const recipientRole = normalizeEventCommunicationRole(data.recipientRole);
+    const recipientOrganization = asTrimmedString(data.recipientOrganization);
+
+    if (!eventId) {
+      throw new HttpsError("invalid-argument", "Missing eventId.");
+    }
+
+    if (!subject) {
+      throw new HttpsError("invalid-argument", "Missing subject.");
+    }
+
+    if (!body) {
+      throw new HttpsError("invalid-argument", "Missing message body.");
+    }
+
+    const requesterUID = request.auth?.uid ?? "";
+    const requesterEmail = asTrimmedString(request.auth?.token?.email).toLowerCase();
+
+    if (!requesterUID) {
+      throw new HttpsError("unauthenticated", "Sign in required.");
+    }
+
+    const eventRef = db.collection("events").doc(eventId);
+    const eventSnap = await eventRef.get();
+
+    if (!eventSnap.exists) {
+      throw new HttpsError("not-found", "Event not found.");
+    }
+
+    const eventData = eventSnap.data() ?? {};
+
+    if (!canManageEventCommunication(request, eventData)) {
+      logger.warn("sendEventCommunication denied", {
+        eventId,
+        requesterUID,
+        requesterEmail,
+        databaseId: "b4-v2-default-clone",
+      });
+      throw new HttpsError("permission-denied", "Event manager access required.");
+    }
+
+    const eventTitle = asTrimmedString(eventData.title) || "Trivia GOAT Event";
+    const logRef = eventRef.collection("communicationLogs").doc();
+    const rootLogRef = db.collection("eventCommunicationLogs").doc(logRef.id);
+
+    let recipients: EventCommunicationRecipient[] = [];
+
+    if (testMode) {
+      recipients = [{
+        guestId: requesterUID,
+        email: requesterEmail,
+        name: cleanDisplayName(request.auth?.token?.name || requesterEmail.split("@")[0]),
+        role: "admin",
+        status: "test",
+        isVIP: true,
+      }].filter((recipient) => recipient.email && isValidEmail(recipient.email));
+    } else if (mode === "individual") {
+      if (!recipientEmail || !isValidEmail(recipientEmail)) {
+        throw new HttpsError("invalid-argument", "Valid recipientEmail is required.");
+      }
+
+      recipients = [{
+        guestId: recipientGuestId || recipientEmail,
+        email: recipientEmail,
+        name: recipientName || recipientEmail.split("@")[0],
+        role: recipientRole || "guest",
+        status: "individual",
+        isVIP: false,
+        organization: recipientOrganization,
+      }];
+    } else {
+      recipients = await resolveEventCommunicationRecipients(eventId, audience);
+    }
+
+    if (recipients.length === 0) {
+      throw new HttpsError("failed-precondition", "No valid recipients found.");
+    }
+
+    if (!testMode && recipients.length > 250) {
+      throw new HttpsError("invalid-argument", "Communication batch limit is 250.");
+    }
+
+    const sentEmails: string[] = [];
+    const failedEmails: string[] = [];
+
+    for (const recipient of recipients) {
+      try {
+        const personalizedBody = personalizeEventCommunicationBody(body, eventTitle, recipient);
+        await sendEventCommunicationEmail(recipient.email, eventTitle, subject, personalizedBody);
+        sentEmails.push(recipient.email);
+      } catch (error) {
+        logger.error("Event communication email failed", {
+          error: String(error),
+          eventId,
+          toEmail: recipient.email,
+        });
+        failedEmails.push(recipient.email);
+      }
+    }
+
+    const logPayload = {
+      eventId,
+      eventTitle,
+      audience,
+      template,
+      subject,
+      body,
+      testMode,
+      mode,
+      requestedBy: requesterUID,
+      requestedByEmail: requesterEmail,
+      recipientCount: recipients.length,
+      sentCount: sentEmails.length,
+      failedCount: failedEmails.length,
+      sentEmails,
+      failedEmails,
+      transport: "resend_existing_event_mail_transport",
+      status: failedEmails.length > 0 ? "partial" : "sent",
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    };
+
+    await Promise.all([
+      logRef.set(logPayload, { merge: true }),
+      rootLogRef.set(logPayload, { merge: true }),
+    ]);
+
+    logger.info("sendEventCommunication complete", {
+      eventId,
+      audience,
+      template,
+      testMode,
+      mode,
+      sentCount: sentEmails.length,
+      failedCount: failedEmails.length,
+      databaseId: "b4-v2-default-clone",
+    });
+
+    return {
+      success: true,
+      eventId,
+      audience,
+      template,
+      testMode,
+      mode,
+      status: failedEmails.length > 0 ? "partial" : "sent",
+      recipientCount: recipients.length,
+      sentCount: sentEmails.length,
+      failedCount: failedEmails.length,
+      emails: sentEmails,
+      failedEmails,
+      logId: logRef.id,
+    };
+  }
+);
+
 /**
  * Accepts or declines an Event CRM invitation using a secure token.
  * @param {CallableRequest} request - Callable request.
@@ -5807,3 +6317,5 @@ export const healthCheck = onCall(
     };
   }
 );
+
+
