@@ -752,6 +752,27 @@ final class AppState: ObservableObject {
         return true
     }
     
+    func liveAcceptedGuestCount(for eventID: String) -> Int {
+        guests(for: eventID).filter { guest in
+            let status = guest.invitationStatus
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+                .replacingOccurrences(of: "-", with: "_")
+                .replacingOccurrences(of: " ", with: "_")
+
+            return status == "accepted" || status == "checked_in" || status == "checkedin"
+        }.count
+    }
+
+    func liveCapacityCount(for event: TGEvent) -> Int {
+        max(event.attendeeCount, liveAcceptedGuestCount(for: event.id))
+    }
+
+    func hasCapacityAvailable(for event: TGEvent) -> Bool {
+        guard event.capacity > 0 else { return true }
+        return liveCapacityCount(for: event) < event.capacity
+    }
+    
     func isEventLive(_ event: TGEvent) -> Bool {
         let status = event.status
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1228,7 +1249,16 @@ final class AppState: ObservableObject {
             showEventToast("RSVP CLOSED")
             return
         }
-        
+
+        guard hasCapacityAvailable(for: event) else {
+            if event.waitlistEnabled && isWaitlistWindowOpen(for: event) {
+                joinEventWaitlist(event)
+            } else {
+                showEventToast("EVENT FULL")
+            }
+            return
+        }
+
         RSVPedEventIDs.insert(event.id)
         locallyIncrementEventAttendance(for: event.id)
         
@@ -1243,6 +1273,7 @@ final class AppState: ObservableObject {
             Task { @MainActor in
                 if let error {
                     self.RSVPedEventIDs.remove(event.id)
+                    self.locallyDecrementEventAttendance(for: event.id)
                     self.refreshEvents()
                     print("⚠️ RSVP failed: \(error)")
                     self.showEventToast("RSVP FAILED")
@@ -1382,6 +1413,47 @@ final class AppState: ObservableObject {
             )
         }
         
+        syncSelectedAndFeaturedEvent()
+    }
+    
+    private func locallyDecrementEventAttendance(for eventID: String) {
+        events = events.map { event in
+            guard event.id == eventID else { return event }
+
+            return TGEvent(
+                id: event.id,
+                title: event.title,
+                heroLine: event.heroLine,
+                summary: event.summary,
+                coverImageURL: event.coverImageURL,
+                status: event.status,
+                approvalStatus: event.approvalStatus,
+                visibility: event.visibility,
+                category: event.category,
+                locationType: event.locationType,
+                startsAt: event.startsAt,
+                endsAt: event.endsAt,
+                rsvpOpensAt: event.rsvpOpensAt,
+                rsvpClosesAt: event.rsvpClosesAt,
+                waitlistOpensAt: event.waitlistOpensAt,
+                waitlistClosesAt: event.waitlistClosesAt,
+                capacity: event.capacity,
+                attendeeCount: max(0, event.attendeeCount - 1),
+                waitlistCount: event.waitlistCount,
+                waitlistEnabled: event.waitlistEnabled,
+                featured: event.featured,
+                featuredPriority: event.featuredPriority,
+                published: event.published,
+                organizerUID: event.organizerUID,
+                organizerName: event.organizerName,
+                submittedByUID: event.submittedByUID,
+                approvedByUID: event.approvedByUID,
+                approvedAt: event.approvedAt,
+                rejectedReason: event.rejectedReason,
+                createdAt: event.createdAt
+            )
+        }
+
         syncSelectedAndFeaturedEvent()
     }
     

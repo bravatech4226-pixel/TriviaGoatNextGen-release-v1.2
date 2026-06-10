@@ -18,14 +18,19 @@ import FirebaseFunctions
 import FirebaseFirestore
 
 struct EventManagementView: View {
-
+    
     @EnvironmentObject private var app: AppState
-
+    
     let event: AppState.TGEvent
-
+    
     @State private var activeCommand: EventCommandSheet?
     @State private var commandNotes: String = ""
-
+    @State private var communicationAudience: CommunicationAudience = .accepted
+    @State private var communicationTemplate: CommunicationTemplate = .reminder
+    @State private var communicationSubject: String = ""
+    @State private var communicationIndividualGuest: GuestRecord? = nil
+    @State private var isSendingCommunication: Bool = false
+    
     @State private var guestName: String = ""
     @State private var guestEmail: String = ""
     @State private var guestOrganization: String = ""
@@ -35,11 +40,11 @@ struct EventManagementView: View {
     @State private var guestIsVIP: Bool = false
     @State private var guestRecords: [GuestRecord] = []
     @State private var guestFilter: GuestFilter = .all
-
+    
     @State private var sessionRecords: [EventSession] = []
     @State private var liveEventSessionsListener: ListenerRegistration? = nil
     @State private var liveEventSessionsEventID: String = ""
-
+    
     @State private var sessionTitle: String = ""
     @State private var sessionDescription: String = ""
     @State private var sessionRoom: String = "Main Stage"
@@ -62,8 +67,8 @@ struct EventManagementView: View {
     @State private var editSessionFeatured: Bool = false
     @State private var editSessionStatus: String = "draft"
     @State private var editSessionSpeakerIDs: Set<String> = []
-
-
+    
+    
     @State private var contactImportRole: GuestRole = .delegate
     @State private var contactImportVIP: Bool = false
     @State private var contactsPermissionStatus: CNAuthorizationStatus = CNContactStore.authorizationStatus(for: .contacts)
@@ -76,7 +81,7 @@ struct EventManagementView: View {
     @State private var liveEventGuests: [AppState.EventGuest] = []
     @State private var liveEventGuestsListener: ListenerRegistration? = nil
     @State private var liveEventGuestsEventID: String = ""
-
+    
     @State private var editingGuest: GuestRecord? = nil
     @State private var editGuestName: String = ""
     @State private var editGuestEmail: String = ""
@@ -88,9 +93,9 @@ struct EventManagementView: View {
     @State private var editGuestBio: String = ""
     @State private var editGuestHeadshotURL: String = ""
     @State private var editGuestFeaturedSpeaker: Bool = false
-
+    
     private let contactStore = CNContactStore()
-
+    
     private enum EventCommandSheet: String, Identifiable {
         case checkIn
         case badges
@@ -103,10 +108,10 @@ struct EventManagementView: View {
         case messageAttendees
         case sendReminder
         case messageWaitlist
-
+        
         var id: String { rawValue }
     }
-
+    
     private enum GuestRole: String, CaseIterable, Identifiable {
         case delegate = "Delegate"
         case speaker = "Speaker"
@@ -115,14 +120,14 @@ struct EventManagementView: View {
         case vip = "VIP"
         case staff = "Staff"
         case attendee = "Attendee"
-
+        
         var id: String { rawValue }
-
+        
         var backendValue: String {
             rawValue.lowercased().replacingOccurrences(of: " ", with: "_")
         }
     }
-
+    
     private enum GuestStatus: String, CaseIterable, Identifiable {
         case manual = "Manual"
         case staged = "Staged"
@@ -130,14 +135,14 @@ struct EventManagementView: View {
         case accepted = "Accepted"
         case declined = "Declined"
         case checkedIn = "Checked In"
-
+        
         var id: String { rawValue }
-
+        
         var backendValue: String {
             rawValue.lowercased().replacingOccurrences(of: " ", with: "_")
         }
     }
-
+    
     private enum GuestFilter: String, CaseIterable, Identifiable {
         case all = "All"
         case staged = "Staged"
@@ -145,34 +150,130 @@ struct EventManagementView: View {
         case accepted = "Accepted"
         case vip = "VIP"
         case staff = "Staff"
-
+        
         var id: String { rawValue }
     }
 
+    private enum CommunicationAudience: String, CaseIterable, Identifiable {
+        case all = "All Guests"
+        case accepted = "Accepted"
+        case invited = "Invited"
+        case waitlist = "Waitlist"
+        case checkedIn = "Checked In"
+        case vip = "VIP"
+        case speakers = "Speakers"
+
+        var id: String { rawValue }
+
+        var shortLabel: String {
+            switch self {
+            case .all: return "ALL"
+            case .accepted: return "ACCEPTED"
+            case .invited: return "INVITED"
+            case .waitlist: return "WAITLIST"
+            case .checkedIn: return "CHECKED IN"
+            case .vip: return "VIP"
+            case .speakers: return "SPEAKERS"
+            }
+        }
+
+        var backendValue: String {
+            switch self {
+            case .all: return "all"
+            case .accepted: return "accepted"
+            case .invited: return "invited"
+            case .waitlist: return "waitlist"
+            case .checkedIn: return "checked_in"
+            case .vip: return "vip"
+            case .speakers: return "speakers"
+            }
+        }
+
+        var icon: String {
+            switch self {
+            case .all: return "person.3.fill"
+            case .accepted: return "checkmark.seal.fill"
+            case .invited: return "paperplane.fill"
+            case .waitlist: return "person.crop.circle.badge.clock"
+            case .checkedIn: return "qrcode.viewfinder"
+            case .vip: return "star.circle.fill"
+            case .speakers: return "mic.fill"
+            }
+        }
+    }
+
+    private enum CommunicationTemplate: String, CaseIterable, Identifiable {
+        case reminder = "Reminder"
+        case finalCall = "Final Call"
+        case venueChange = "Venue Change"
+        case scheduleUpdate = "Schedule Update"
+        case checkInInstructions = "Check-In"
+        case thankYou = "Thank You"
+        case custom = "Custom"
+
+        var id: String { rawValue }
+
+        var shortLabel: String {
+            switch self {
+            case .reminder: return "REMINDER"
+            case .finalCall: return "FINAL CALL"
+            case .venueChange: return "VENUE"
+            case .scheduleUpdate: return "SCHEDULE"
+            case .checkInInstructions: return "CHECK-IN"
+            case .thankYou: return "THANK YOU"
+            case .custom: return "CUSTOM"
+            }
+        }
+
+        var backendValue: String {
+            switch self {
+            case .reminder: return "reminder"
+            case .finalCall: return "final_call"
+            case .venueChange: return "venue_change"
+            case .scheduleUpdate: return "schedule_update"
+            case .checkInInstructions: return "check_in_instructions"
+            case .thankYou: return "thank_you"
+            case .custom: return "custom"
+            }
+        }
+
+        var icon: String {
+            switch self {
+            case .reminder: return "bell.badge.fill"
+            case .finalCall: return "megaphone.fill"
+            case .venueChange: return "mappin.and.ellipse"
+            case .scheduleUpdate: return "calendar.badge.clock"
+            case .checkInInstructions: return "qrcode.viewfinder"
+            case .thankYou: return "sparkles"
+            case .custom: return "square.and.pencil"
+            }
+        }
+    }
+    
     private struct GuestRecord: Identifiable, Equatable {
         let id: UUID
-
+        
         var name: String
         var email: String
-
+        
         var organization: String
-
+        
         var role: GuestRole
         var status: GuestStatus
-
+        
         var isVIP: Bool
-
+        
         var notes: String
-
+        
         // CRM speaker profile fields
         var bio: String = ""
         var headshotURL: String? = nil
         var featuredSpeaker: Bool = false
-
+        
         var source: String
         var createdAt: Date
-    
-
+        
+        
         init(
             id: UUID = UUID(),
             name: String,
@@ -197,71 +298,79 @@ struct EventManagementView: View {
             self.createdAt = createdAt
         }
     }
-
+    
     private struct ContactCandidate: Identifiable, Equatable {
         let id: String
         let name: String
         let email: String
         let organization: String
-
+        
         var displayEmail: String {
             email.isEmpty ? "No email on contact" : email
         }
     }
-
+    
     private var currentEvent: AppState.TGEvent {
         app.events.first(where: { $0.id == event.id }) ?? app.selectedEvent ?? event
     }
 
+    private var currentCRMGuests: [AppState.EventGuest] {
+        if !liveEventGuests.isEmpty {
+            return liveEventGuests
+        }
+
+        return app.guests(for: currentEvent.id)
+    }
+    
     private var isApproved: Bool { currentEvent.approvalStatus == "approved" }
     private var isSubmitted: Bool { currentEvent.approvalStatus == "submitted" }
     private var isDraft: Bool { currentEvent.approvalStatus == "draft" }
     private var isRejected: Bool { currentEvent.approvalStatus == "rejected" }
     private var isLivePublished: Bool { currentEvent.published && isApproved }
-
+    
     private var filteredContacts: [ContactCandidate] {
         let query = contactSearchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !query.isEmpty else { return importedContacts }
-
+        
         return importedContacts.filter {
             $0.name.lowercased().contains(query)
             || $0.email.lowercased().contains(query)
             || $0.organization.lowercased().contains(query)
         }
     }
-
+    
     private var liveGuestRecords: [GuestRecord] {
         currentCRMGuests.map { crmGuestRecord(from: $0) }
     }
-
+    
     private var directoryGuestRecords: [GuestRecord] {
         let persistedEmails = Set(
             liveGuestRecords
                 .map { normalizedEmail($0.email) }
                 .filter { !$0.isEmpty }
         )
-
+        
         let localOnlyRecords = guestRecords.filter { record in
             let email = normalizedEmail(record.email)
             guard !email.isEmpty else { return true }
             return !persistedEmails.contains(email)
         }
-
+        
         return (liveGuestRecords + localOnlyRecords).sorted { lhs, rhs in
             let lhsStatus = statusSortRank(lhs.status)
             let rhsStatus = statusSortRank(rhs.status)
-
+            
             if lhsStatus != rhsStatus {
                 return lhsStatus < rhsStatus
             }
-
+            
             return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
         }
     }
-
+    
     private var filteredGuests: [GuestRecord] {
         let records = directoryGuestRecords
-
+        
         switch guestFilter {
         case .all:
             return records
@@ -277,37 +386,74 @@ struct EventManagementView: View {
             return records.filter { $0.role == .staff || $0.role == .moderator }
         }
     }
-
+    
     private var stagedInviteCount: Int {
         guestRecords.filter { $0.status == .staged }.count
     }
-
+    
     private var displayedContacts: [ContactCandidate] {
         Array(filteredContacts.prefix(250))
     }
-
+    
     private var selectableDisplayedContacts: [ContactCandidate] {
         displayedContacts.filter { !$0.email.isEmpty && !isContactAlreadyInDirectory($0) }
     }
-
+    
     private var capacityText: String {
         currentEvent.capacity > 0
         ? "\(currentEvent.attendeeCount)/\(currentEvent.capacity) attending"
         : "\(currentEvent.attendeeCount) attending"
     }
-
+    
     private var remainingText: String {
         currentEvent.capacity > 0
-        ? "\(max(0, currentEvent.capacity - currentEvent.attendeeCount)) seats left"
+        ? "\(max(0, currentEvent.capacity - liveCRMCapacityCount)) seats left"
         : "Open capacity"
     }
-
+    
+    private var invitedCRMCount: Int {
+        currentCRMGuests.filter { normalizedInvitationStatus($0.invitationStatus) == "invited" }.count
+    }
+    
+    private var acceptedCRMCount: Int {
+        currentCRMGuests.filter { normalizedInvitationStatus($0.invitationStatus) == "accepted" }.count
+    }
+    
+    private var declinedCRMCount: Int {
+        currentCRMGuests.filter { normalizedInvitationStatus($0.invitationStatus) == "declined" }.count
+    }
+    
+    private var checkedInCRMCount: Int {
+        currentCRMGuests.filter { normalizedInvitationStatus($0.invitationStatus) == "checked_in" }.count
+    }
+    
+    private var liveCRMCapacityCount: Int {
+        max(currentEvent.attendeeCount, acceptedCRMCount + checkedInCRMCount)
+    }
+    
+    private var liveCapacityPercent: Int {
+        guard currentEvent.capacity > 0 else {
+            return liveCRMCapacityCount > 0 ? 100 : 0
+        }
+        
+        return min(100, Int((Double(liveCRMCapacityCount) / Double(currentEvent.capacity)) * 100.0))
+    }
+    
+    private var operationsHealthText: String {
+        if isLivePublished && checkedInCRMCount > 0 { return "Live check-in active" }
+        if isLivePublished { return "Published and operational" }
+        if isApproved { return "Approved, ready to publish" }
+        if isSubmitted { return "Awaiting admin review" }
+        if isRejected { return "Needs creator revision" }
+        return "Draft operations setup"
+    }
+    
     private var statusText: String {
         if isLivePublished { return "PUBLISHED" }
         if isApproved { return "APPROVED" }
         return currentEvent.approvalStatus.uppercased()
     }
-
+    
     private var lifecycleText: String {
         if isLivePublished { return "Public access active" }
         if isApproved { return "Approved, ready to publish" }
@@ -316,10 +462,10 @@ struct EventManagementView: View {
         if isDraft { return "Draft in progress" }
         return "Event operations"
     }
-
+    
     private var statusColor: Color {
         if isLivePublished || isApproved { return .green }
-
+        
         switch currentEvent.approvalStatus {
         case "submitted": return .orange
         case "rejected": return .red
@@ -327,13 +473,13 @@ struct EventManagementView: View {
         default: return .orange
         }
     }
-
+    
     var body: some View {
         GeometryReader { geo in
             eventManagementRoot(safeTop: geo.safeAreaInsets.top)
         }
     }
-
+    
     private func eventManagementRoot(safeTop: CGFloat) -> some View {
         ZStack {
             SpaceBackground()
@@ -349,7 +495,7 @@ struct EventManagementView: View {
             app.selectedEvent = currentEvent
             app.refreshEvents()
             contactsPermissionStatus = CNContactStore.authorizationStatus(for: .contacts)
-
+            
             startLiveEventGuestsListener(for: currentEvent.id)
             startLiveEventSessionsListener(for: currentEvent.id)
         }
@@ -358,20 +504,21 @@ struct EventManagementView: View {
             stopLiveEventSessionsListener()
         }
     }
-
+    
     private func eventManagementContent(safeTop: CGFloat) -> some View {
         VStack(spacing: 0) {
             header(safeTop: safeTop)
-
+            
             ScrollView(showsIndicators: false) {
                 eventManagementSections
             }
         }
     }
-
+    
     private var eventManagementSections: some View {
         VStack(spacing: 16) {
             heroPanel
+            eventOpsCommandCenter
             lifecyclePanel
             statusPanel
             adminReviewPanel
@@ -384,7 +531,7 @@ struct EventManagementView: View {
         .padding(.top, 18)
         .padding(.bottom, 40)
     }
-
+    
     private func commandSheetHost(_ command: EventCommandSheet) -> AnyView {
         AnyView(
             commandSheet(command)
@@ -420,21 +567,21 @@ struct EventManagementView: View {
                     .overlay(Circle().stroke(Color.white.opacity(0.12), lineWidth: 1))
             }
             .buttonStyle(.plain)
-
+            
             VStack(alignment: .leading, spacing: 3) {
                 Text("MANAGE EVENT")
                     .font(.system(size: 12, weight: .black, design: .monospaced))
                     .foregroundColor(.orange.opacity(0.95))
                     .tracking(1.6)
-
+                
                 Text(currentEvent.category.uppercased())
                     .font(.system(size: 10, weight: .bold, design: .monospaced))
                     .foregroundColor(.white.opacity(0.48))
                     .lineLimit(1)
             }
-
+            
             Spacer()
-
+            
             Button {
                 HapticManager.instance.impact(.light)
                 SpatialAudioManager.shared.play(.uiTap)
@@ -455,7 +602,7 @@ struct EventManagementView: View {
         .padding(.bottom, 12)
         .background(Color.black.opacity(0.72).ignoresSafeArea(edges: .top))
     }
-
+    
     private var heroPanel: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
@@ -466,7 +613,7 @@ struct EventManagementView: View {
                     .frame(height: 26)
                     .background(Capsule().fill((isLivePublished || isApproved) ? Color.green.opacity(0.92) : statusColor.opacity(0.18)))
                     .overlay(Capsule().stroke(statusColor.opacity(0.26), lineWidth: 1))
-
+                
                 Text(currentEvent.visibility.uppercased())
                     .font(.system(size: 9, weight: .black, design: .monospaced))
                     .foregroundColor(.white.opacity(0.48))
@@ -474,28 +621,28 @@ struct EventManagementView: View {
                     .padding(.horizontal, 10)
                     .frame(height: 26)
                     .background(Capsule().fill(Color.white.opacity(0.085)))
-
+                
                 Spacer()
-
+                
                 Text(currentEvent.locationType.uppercased())
                     .font(.system(size: 9, weight: .black, design: .monospaced))
                     .foregroundColor(.orange.opacity(0.82))
                     .tracking(1)
             }
-
+            
             Text(currentEvent.title)
                 .font(.system(size: currentEvent.title.count > 46 ? 26 : 30, weight: .black, design: .rounded))
                 .foregroundColor(.white)
                 .fixedSize(horizontal: false, vertical: true)
-
+            
             Text(currentEvent.heroLine.isEmpty ? currentEvent.summary : currentEvent.heroLine)
                 .font(.system(size: 14, weight: .semibold, design: .rounded))
                 .foregroundColor(.white.opacity(0.66))
                 .lineLimit(4)
                 .fixedSize(horizontal: false, vertical: true)
-
+            
             Divider().overlay(Color.white.opacity(0.08))
-
+            
             HStack {
                 statBlock(title: "CAPACITY", value: capacityText)
                 statBlock(title: "REMAINING", value: remainingText)
@@ -506,7 +653,56 @@ struct EventManagementView: View {
         .background(RoundedRectangle(cornerRadius: 28, style: .continuous).fill(Color.black.opacity(0.82)))
         .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous).stroke(Color.orange.opacity(0.22), lineWidth: 1.2))
     }
-
+    
+    
+    private var eventOpsCommandCenter: some View {
+        sectionPanel(title: "EVENT OPERATIONS CENTER", subtitle: operationsHealthText) {
+            VStack(spacing: 12) {
+                HStack(spacing: 10) {
+                    crmMetric("ACCEPTED", acceptedCRMCount, tint: .green)
+                    crmMetric("CHECKED IN", checkedInCRMCount, tint: .green)
+                }
+                
+                HStack(spacing: 10) {
+                    crmMetric("INVITED", invitedCRMCount, tint: .orange)
+                    crmMetric("WAITLIST", currentEvent.waitlistCount, tint: .orange)
+                }
+                
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("CAPACITY SIGNAL")
+                            .font(.system(size: 8, weight: .black, design: .monospaced))
+                            .foregroundColor(.white.opacity(0.42))
+                            .tracking(1)
+                        
+                        Spacer()
+                        
+                        Text(currentEvent.capacity > 0 ? "\(liveCRMCapacityCount)/\(currentEvent.capacity)" : "\(liveCRMCapacityCount) RSVP")
+                            .font(.system(size: 8, weight: .black, design: .monospaced))
+                            .foregroundColor(.white.opacity(0.62))
+                            .tracking(0.8)
+                    }
+                    
+                    GeometryReader { proxy in
+                        ZStack(alignment: .leading) {
+                            Capsule()
+                                .fill(Color.white.opacity(0.08))
+                            
+                            Capsule()
+                                .fill(liveCapacityPercent >= 90 ? Color.orange.opacity(0.92) : Color.green.opacity(0.82))
+                                .frame(width: max(8, proxy.size.width * CGFloat(liveCapacityPercent) / 100.0))
+                        }
+                    }
+                    .frame(height: 10)
+                    .overlay(Capsule().stroke(Color.white.opacity(0.06), lineWidth: 1))
+                }
+                .padding(12)
+                .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.black.opacity(0.28)))
+                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color.white.opacity(0.07), lineWidth: 1))
+            }
+        }
+    }
+    
     private var lifecyclePanel: some View {
         sectionPanel(title: "EVENT LIFECYCLE", subtitle: lifecycleText) {
             VStack(spacing: 10) {
@@ -517,37 +713,37 @@ struct EventManagementView: View {
             }
         }
     }
-
+    
     private func lifecycleRow(title: String, isComplete: Bool) -> some View {
         HStack(spacing: 10) {
             Image(systemName: isComplete ? "checkmark.circle.fill" : "circle")
                 .font(.system(size: 14, weight: .black))
                 .foregroundColor(isComplete ? .green.opacity(0.92) : .white.opacity(0.28))
-
+            
             Text(title.uppercased())
                 .font(.system(size: 10, weight: .black, design: .monospaced))
                 .foregroundColor(isComplete ? .white.opacity(0.84) : .white.opacity(0.42))
                 .tracking(0.8)
-
+            
             Spacer()
         }
         .padding(.horizontal, 12)
         .frame(height: 38)
         .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.black.opacity(0.30)))
     }
-
+    
     private var statusPanel: some View {
         sectionPanel(title: "STATUS CONTROLS", subtitle: "Creator workflow and publishing") {
             HStack(spacing: 10) {
                 controlButton(title: primaryActionTitle, icon: primaryActionIcon, tint: primaryActionTint) {
                     handlePrimaryAction()
                 }
-
+                
                 controlButton(title: currentEvent.featured ? "FEATURED" : "FEATURE", icon: "star.fill", tint: .orange) {
                     app.setEventFeatured(currentEvent, featured: !currentEvent.featured)
                 }
             }
-
+            
             HStack(spacing: 10) {
                 controlButton(title: "EDIT", icon: "square.and.pencil", tint: .white) {
                     guard app.canEdit(currentEvent) else {
@@ -557,7 +753,7 @@ struct EventManagementView: View {
                     app.selectedEvent = currentEvent
                     app.setRoute(.eventEditor)
                 }
-
+                
                 controlButton(title: "PUBLIC VIEW", icon: "arrow.up.right.square.fill", tint: .white) {
                     guard isLivePublished else {
                         app.showEventToast("NOT PUBLIC YET")
@@ -569,7 +765,7 @@ struct EventManagementView: View {
             }
         }
     }
-
+    
     @ViewBuilder
     private var adminReviewPanel: some View {
         if app.canModerate(currentEvent) && isSubmitted {
@@ -581,7 +777,7 @@ struct EventManagementView: View {
             }
         }
     }
-
+    
     private var primaryActionTitle: String {
         if isLivePublished { return "LIVE" }
         if isApproved { return "PUBLISH" }
@@ -589,7 +785,7 @@ struct EventManagementView: View {
         if isRejected { return "REVISE" }
         return "SUBMIT"
     }
-
+    
     private var primaryActionIcon: String {
         if isLivePublished { return "checkmark.seal.fill" }
         if isApproved { return "paperplane.fill" }
@@ -597,13 +793,13 @@ struct EventManagementView: View {
         if isRejected { return "exclamationmark.triangle.fill" }
         return "paperplane.fill"
     }
-
+    
     private var primaryActionTint: Color {
         if isLivePublished { return .green }
         if isRejected { return .red }
         return .orange
     }
-
+    
     private func handlePrimaryAction() {
         if isLivePublished {
             app.showEventToast("EVENT IS LIVE")
@@ -626,56 +822,177 @@ struct EventManagementView: View {
     }
     
     
-
+    
     private var attendeeSnapshot: some View {
-        let guests = currentCRMGuests
-
-        let invitedCount = guests.filter {
-            normalizedInvitationStatus($0.invitationStatus) == "invited"
-        }.count
-
-        let acceptedCount = guests.filter {
-            normalizedInvitationStatus($0.invitationStatus) == "accepted"
-        }.count
-
-        let declinedCount = guests.filter {
-            normalizedInvitationStatus($0.invitationStatus) == "declined"
-        }.count
-
-        let checkedInCount = guests.filter {
-            normalizedInvitationStatus($0.invitationStatus) == "checked_in"
-        }.count
-
-        let confirmedGuestCount = acceptedCount + checkedInCount
-        let dashboardAttendeeCount = max(currentEvent.attendeeCount, confirmedGuestCount)
-
-        return sectionPanel(title: "ATTENDEE SNAPSHOT", subtitle: "Capacity, invites, and confirmed demand") {
+        sectionPanel(title: "ATTENDEE SNAPSHOT", subtitle: "Capacity, invites, and confirmed demand") {
             VStack(spacing: 12) {
                 EventAttendeePreview(
-                    attendeeCount: dashboardAttendeeCount,
+                    attendeeCount: liveCRMCapacityCount,
                     capacity: max(1, currentEvent.capacity),
                     accent: .orange
                 )
 
                 HStack(spacing: 10) {
-                    crmMetric("INVITED", invitedCount, tint: .orange)
-                    crmMetric("ACCEPTED", acceptedCount, tint: .green)
+                    crmMetric("INVITED", invitedCRMCount, tint: .orange)
+                    crmMetric("ACCEPTED", acceptedCRMCount, tint: .green)
                 }
 
                 HStack(spacing: 10) {
-                    crmMetric("DECLINED", declinedCount, tint: .red)
-                    crmMetric("CHECKED IN", checkedInCount, tint: .green)
+                    crmMetric("DECLINED", declinedCRMCount, tint: .red)
+                    crmMetric("CHECKED IN", checkedInCRMCount, tint: .green)
                 }
             }
         }
     }
 
-    private var currentCRMGuests: [AppState.EventGuest] {
-        if !liveEventGuests.isEmpty {
-            return liveEventGuests
+    private func guestRow(_ guest: GuestRecord) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                speakerOrGuestAvatar(guest)
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(guest.name)
+                        .font(.system(size: 13, weight: .black, design: .rounded))
+                        .foregroundColor(.white.opacity(0.94))
+                        .lineLimit(1)
+                    
+                    Text("\(guest.role.rawValue.uppercased()) • \(guest.status.rawValue.uppercased()) • \(guest.source.uppercased())")
+                        .font(.system(size: 9, weight: .black, design: .monospaced))
+                        .foregroundColor(.white.opacity(0.48))
+                        .tracking(0.6)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+                    
+                    if !guest.email.isEmpty {
+                        Text(guest.email)
+                            .font(.system(size: 10, weight: .semibold, design: .rounded))
+                            .foregroundColor(.white.opacity(0.42))
+                            .lineLimit(1)
+                    }
+                }
+                
+                Spacer()
+                
+                VStack(alignment: .trailing, spacing: 7) {
+                    if guest.isVIP || guest.role == .vip {
+                        Text("VIP")
+                            .font(.system(size: 8, weight: .black, design: .monospaced))
+                            .foregroundColor(.black.opacity(0.88))
+                            .padding(.horizontal, 8)
+                            .frame(height: 22)
+                            .background(Capsule().fill(Color.orange.opacity(0.96)))
+                    }
+                    
+                    if guest.status == .checkedIn {
+                        Text("ARRIVED")
+                            .font(.system(size: 8, weight: .black, design: .monospaced))
+                            .foregroundColor(.black.opacity(0.88))
+                            .padding(.horizontal, 8)
+                            .frame(height: 22)
+                            .background(Capsule().fill(Color.green.opacity(0.92)))
+                    }
+                }
+            }
+            
+            HStack(spacing: 8) {
+                Button {
+                    beginEditingGuest(guest)
+                } label: {
+                    guestRowActionLabel("EDIT", "square.and.pencil", tint: .orange)
+                }
+                .buttonStyle(.plain)
+                
+                Button {
+                    openIndividualCommunication(for: guest)
+                } label: {
+                    guestRowActionLabel("MESSAGE", "envelope.fill", tint: .orange)
+                }
+                .buttonStyle(.plain)
+                .disabled(normalizedEmail(guest.email).isEmpty)
+                .opacity(normalizedEmail(guest.email).isEmpty ? 0.55 : 1)
+                
+                Button {
+                    markGuestCheckedIn(guest)
+                } label: {
+                    guestRowActionLabel(guest.status == .checkedIn ? "CHECKED IN" : "CHECK IN", "checkmark.seal.fill", tint: .green)
+                }
+                .buttonStyle(.plain)
+                .disabled(guest.status == .checkedIn || guest.status == .declined)
+                .opacity((guest.status == .checkedIn || guest.status == .declined) ? 0.55 : 1)
+                
+                Button {
+                    removeGuestRecord(guest)
+                } label: {
+                    guestRowActionLabel("REMOVE", "minus.circle.fill", tint: .red)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Remove \(guest.name)")
+            }
         }
-
-        return app.guests(for: currentEvent.id)
+        .padding(12)
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.black.opacity(0.34)))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(guest.status == .checkedIn ? Color.green.opacity(0.20) : Color.white.opacity(0.065), lineWidth: 1)
+        )
+    }
+    
+    private func guestRowActionLabel(_ title: String, _ icon: String, tint: Color) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: icon)
+                .font(.system(size: 9, weight: .black))
+            
+            Text(title)
+                .font(.system(size: 8, weight: .black, design: .monospaced))
+                .tracking(0.5)
+                .lineLimit(1)
+                .minimumScaleFactor(0.62)
+        }
+        .foregroundColor(tint.opacity(0.92))
+        .frame(maxWidth: .infinity)
+        .frame(height: 30)
+        .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(tint.opacity(0.10)))
+        .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).stroke(tint.opacity(0.18), lineWidth: 1))
+    }
+    
+    private func speakerOrGuestAvatar(_ guest: GuestRecord) -> some View {
+        ZStack {
+            Circle()
+                .fill(guestTint(guest).opacity(0.13))
+                .frame(width: 42, height: 42)
+            
+            if let urlString = guest.headshotURL,
+               let url = URL(string: urlString.trimmingCharacters(in: .whitespacesAndNewlines)),
+               !urlString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    case .failure:
+                        Image(systemName: guestIcon(guest))
+                            .font(.system(size: 14, weight: .black))
+                            .foregroundColor(guestTint(guest))
+                    case .empty:
+                        ProgressView()
+                            .tint(.orange)
+                            .scaleEffect(0.70)
+                    @unknown default:
+                        Image(systemName: guestIcon(guest))
+                            .font(.system(size: 14, weight: .black))
+                            .foregroundColor(guestTint(guest))
+                    }
+                }
+                .frame(width: 42, height: 42)
+                .clipShape(Circle())
+            } else {
+                Image(systemName: guestIcon(guest))
+                    .font(.system(size: 14, weight: .black))
+                    .foregroundColor(guestTint(guest))
+            }
+        }
+        .overlay(Circle().stroke(guestTint(guest).opacity(0.22), lineWidth: 1))
     }
 
     private func normalizedInvitationStatus(_ rawValue: String) -> String {
@@ -698,6 +1015,7 @@ struct EventManagementView: View {
             return cleaned.isEmpty ? "staged" : cleaned
         }
     }
+
 
     private func crmGuestRecord(from guest: AppState.EventGuest) -> GuestRecord {
         var record = GuestRecord(
@@ -931,58 +1249,88 @@ struct EventManagementView: View {
     }
 
     private var operationsPanel: some View {
-        sectionPanel(title: "OPERATIONS", subtitle: "Event-day command tools") {
+        sectionPanel(title: "OPERATIONS", subtitle: "Event-day command tools and live control paths") {
             HStack(spacing: 10) {
-                opsTile(title: "CHECK-IN", subtitle: "Door flow", icon: "qrcode.viewfinder", command: .checkIn)
+                opsTile(title: "CHECK-IN", subtitle: "\(checkedInCRMCount) arrived", icon: "qrcode.viewfinder", command: .checkIn)
                 opsTile(title: "BADGES", subtitle: "Guest IDs", icon: "lanyardcard.fill", command: .badges)
             }
+
             HStack(spacing: 10) {
-                opsTile(title: "RUN OF SHOW", subtitle: "Timeline", icon: "list.bullet.rectangle.fill", command: .runOfShow)
+                opsTile(title: "RUN OF SHOW", subtitle: "\(sessionRecords.count) sessions", icon: "list.bullet.rectangle.fill", command: .runOfShow)
                 opsTile(title: "STAFF ROLES", subtitle: "Delegated ops", icon: "person.3.fill", command: .staffRoles)
             }
-        }
-    }
-
-    private var wdcPanel: some View {
-        sectionPanel(
-            title: "PEOPLE & INVITATIONS",
-            subtitle: "Guest management, speakers, delegates, sponsors, and invitations"
-        ) {
-            operationRow(
-                title: "INVITATION CENTER",
-                subtitle: "Import contacts, assign roles, send invitations",
-                icon: "person.crop.circle.badge.plus",
-                command: .invitationCenter
-            )
-
-            operationRow(
-                title: "SPEAKER MANAGEMENT",
-                subtitle: "Headshots, bios, sessions, featured speakers",
-                icon: "person.crop.square.fill",
-                command: .guestPanel
-            )
-
-            operationRow(
-                title: "DELEGATE DIRECTORY",
-                subtitle: "Delegates, VIPs, sponsors, moderators",
-                icon: "person.crop.rectangle.stack.fill",
-                command: .delegateDirectory
-            )
 
             operationRow(
                 title: "SESSION BUILDER",
-                subtitle: "Create tracks, rooms, and time blocks",
+                subtitle: "Create tracks, rooms, speakers, and featured agenda blocks",
                 icon: "rectangle.3.group.fill",
                 command: .sessionBuilder
             )
         }
     }
 
+    private var wdcPanel: some View {
+        sectionPanel(
+            title: "PEOPLE CRM",
+            subtitle: "Guest management, speakers, delegates, sponsors, and invitations"
+        ) {
+            operationRow(
+                title: "INVITATION CENTER",
+                subtitle: "\(stagedInviteCount) staged • \(invitedCRMCount) invited • \(acceptedCRMCount) accepted",
+                icon: "person.crop.circle.badge.plus",
+                command: .invitationCenter
+            )
+
+            operationRow(
+                title: "SPEAKER MANAGEMENT",
+                subtitle: "\(sessionSpeakerOptions.count) speakers/moderators available for sessions",
+                icon: "person.crop.square.fill",
+                command: .guestPanel
+            )
+
+            operationRow(
+                title: "DELEGATE DIRECTORY",
+                subtitle: "Delegates, VIPs, sponsors, moderators, and check-in status",
+                icon: "person.crop.rectangle.stack.fill",
+                command: .delegateDirectory
+            )
+        }
+    }
+
     private var messagingPanel: some View {
-        sectionPanel(title: "MESSAGING", subtitle: "Attendee communication center") {
-            operationRow(title: "MESSAGE ATTENDEES", subtitle: "Send event updates", icon: "envelope.fill", command: .messageAttendees)
-            operationRow(title: "SEND REMINDER", subtitle: "Push/email reminder workflow", icon: "bell.badge.fill", command: .sendReminder)
-            operationRow(title: "MESSAGE WAITLIST", subtitle: "Notify overflow demand", icon: "text.bubble.fill", command: .messageWaitlist)
+        sectionPanel(title: "COMMUNICATIONS CENTER", subtitle: "Segmented event messaging, reminders, and operational notices") {
+            VStack(spacing: 10) {
+                HStack(spacing: 10) {
+                    communicationMetric("ALL", communicationAudienceCount(.all), tint: .white)
+                    communicationMetric("ACCEPTED", communicationAudienceCount(.accepted), tint: .green)
+                }
+
+                HStack(spacing: 10) {
+                    communicationMetric("WAITLIST", communicationAudienceCount(.waitlist), tint: .orange)
+                    communicationMetric("CHECKED IN", communicationAudienceCount(.checkedIn), tint: .green)
+                }
+
+                operationRow(
+                    title: "SEND EVENT UPDATE",
+                    subtitle: "Audience segments, templates, preview and copy workflow",
+                    icon: "envelope.badge.fill",
+                    command: .messageAttendees
+                )
+
+                operationRow(
+                    title: "SEND REMINDER",
+                    subtitle: "Timing, access, and event readiness message",
+                    icon: "bell.badge.fill",
+                    command: .sendReminder
+                )
+
+                operationRow(
+                    title: "MESSAGE WAITLIST",
+                    subtitle: "\(communicationAudienceCount(.waitlist)) waitlisted • capacity movement ready",
+                    icon: "text.bubble.fill",
+                    command: .messageWaitlist
+                )
+            }
         }
     }
 
@@ -1129,12 +1477,45 @@ struct EventManagementView: View {
     private func openCommand(_ command: EventCommandSheet) {
         HapticManager.instance.impact(.light)
         SpatialAudioManager.shared.play(.uiTap)
-        commandNotes = defaultCommandText(for: command)
+
+        if isCommunicationCommand(command) {
+            communicationIndividualGuest = nil
+            communicationTemplate = defaultCommunicationTemplate(for: command)
+            communicationAudience = defaultCommunicationAudience(for: command)
+            communicationSubject = defaultCommunicationSubject(template: communicationTemplate)
+            commandNotes = communicationMessageBody(template: communicationTemplate, audience: communicationAudience)
+        } else {
+            communicationIndividualGuest = nil
+            commandNotes = defaultCommandText(for: command)
+        }
+
         activeCommand = command
 
         if command == .guestPanel || command == .delegateDirectory || command == .staffRoles {
             refreshContactPermissionStatus()
         }
+    }
+
+    private func openIndividualCommunication(for guest: GuestRecord) {
+        let email = normalizedEmail(guest.email)
+        guard !email.isEmpty else {
+            app.showEventToast("EMAIL REQUIRED")
+            return
+        }
+
+        HapticManager.instance.impact(.light)
+        SpatialAudioManager.shared.play(.uiTap)
+
+        communicationIndividualGuest = guest
+        communicationTemplate = .custom
+        communicationAudience = .all
+        communicationSubject = "Update: \(currentEvent.title)"
+        commandNotes = communicationMessageBody(
+            template: .custom,
+            audience: .all,
+            recipient: guest
+        )
+        activeCommand = .messageAttendees
     }
 
     private func commandSheet(_ command: EventCommandSheet) -> AnyView {
@@ -1146,6 +1527,9 @@ struct EventManagementView: View {
 
         case .sessionBuilder:
             bodyContent = AnyView(sessionBuilderPanel)
+
+        case .messageAttendees, .sendReminder, .messageWaitlist:
+            bodyContent = AnyView(communicationsCenterPanel(command))
 
         default:
             bodyContent = AnyView(
@@ -1260,14 +1644,14 @@ struct EventManagementView: View {
         return VStack(spacing: 10) {
             HStack(spacing: 10) {
                 commandMetric("PEOPLE", "\(records.count)")
-                commandMetric("STAGED", "\(stagedInviteCount)")
-                commandMetric("VIP", "\(records.filter { $0.isVIP || $0.role == .vip }.count)")
+                commandMetric("ACCEPTED", "\(records.filter { $0.status == .accepted || $0.status == .checkedIn }.count)")
+                commandMetric("CHECK-IN", "\(records.filter { $0.status == .checkedIn }.count)")
             }
 
             HStack(spacing: 10) {
-                commandMetric("ACCEPTED", "\(records.filter { $0.status == .accepted || $0.status == .checkedIn }.count)")
-                commandMetric("SPEAKERS", "\(records.filter { $0.role == .speaker }.count)")
-                commandMetric("STAFF", "\(records.filter { $0.role == .staff || $0.role == .moderator }.count)")
+                commandMetric("STAGED", "\(stagedInviteCount)")
+                commandMetric("SPEAKERS", "\(records.filter { $0.role == .speaker || $0.role == .moderator }.count)")
+                commandMetric("VIP", "\(records.filter { $0.isVIP || $0.role == .vip }.count)")
             }
         }
     }
@@ -1721,68 +2105,6 @@ struct EventManagementView: View {
         .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Color.white.opacity(0.16), lineWidth: 1))
     }
 
-    private func guestRow(_ guest: GuestRecord) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: guestIcon(guest))
-                .font(.system(size: 14, weight: .black))
-                .foregroundColor(guestTint(guest))
-                .frame(width: 38, height: 38)
-                .background(Circle().fill(guestTint(guest).opacity(0.13)))
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(guest.name)
-                    .font(.system(size: 13, weight: .black, design: .rounded))
-                    .foregroundColor(.white.opacity(0.92))
-                    .lineLimit(1)
-
-                Text("\(guest.role.rawValue.uppercased()) • \(guest.status.rawValue.uppercased()) • \(guest.source.uppercased())")
-                    .font(.system(size: 9, weight: .black, design: .monospaced))
-                    .foregroundColor(.white.opacity(0.46))
-                    .tracking(0.6)
-
-                if !guest.email.isEmpty {
-                    Text(guest.email)
-                        .font(.system(size: 10, weight: .semibold, design: .rounded))
-                        .foregroundColor(.white.opacity(0.40))
-                        .lineLimit(1)
-                }
-            }
-
-            Spacer()
-
-            VStack(alignment: .trailing, spacing: 8) {
-                if guest.isVIP || guest.role == .vip {
-                    Text("VIP")
-                        .font(.system(size: 8, weight: .black, design: .monospaced))
-                        .foregroundColor(.black.opacity(0.88))
-                        .padding(.horizontal, 8)
-                        .frame(height: 22)
-                        .background(Capsule().fill(Color.orange.opacity(0.96)))
-                }
-
-                Button {
-                    removeGuestRecord(guest)
-                } label: {
-                    Image(systemName: "minus.circle.fill")
-                        .font(.system(size: 18, weight: .black))
-                        .foregroundColor(.red.opacity(0.78))
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Remove \(guest.name)")
-            }
-        }
-        .padding(12)
-        .background(RoundedRectangle(cornerRadius: 17, style: .continuous).fill(Color.black.opacity(0.34)))
-        .overlay(
-            RoundedRectangle(cornerRadius: 17, style: .continuous)
-                .stroke(Color.white.opacity(0.055), lineWidth: 1)
-        )
-        .contentShape(Rectangle())
-        .onTapGesture {
-            beginEditingGuest(guest)
-        }
-    }
-
     private func beginEditingGuest(_ guest: GuestRecord) {
         editGuestName = guest.name
         editGuestEmail = guest.email
@@ -2064,6 +2386,56 @@ struct EventManagementView: View {
                 }
             }
     }
+
+    private func markGuestCheckedIn(_ guest: GuestRecord) {
+        guard guest.status != .checkedIn else {
+            app.showEventToast("ALREADY CHECKED IN")
+            return
+        }
+
+        let eventID = currentEvent.id.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !eventID.isEmpty else {
+            app.showEventToast("EVENT NOT FOUND")
+            return
+        }
+
+        let matchingCRMGuest = currentCRMGuests.first {
+            normalizedEmail($0.email) == normalizedEmail(guest.email)
+        }
+
+        if let index = guestRecords.firstIndex(where: { $0.id == guest.id }) {
+            var updated = guestRecords[index]
+            updated.status = .checkedIn
+            guestRecords[index] = updated
+        }
+
+        guard let crmGuest = matchingCRMGuest else {
+            app.showEventToast("LOCAL CHECK-IN")
+            return
+        }
+
+        FirestoreService.db
+            .collection("events")
+            .document(eventID)
+            .collection("guests")
+            .document(crmGuest.id)
+            .setData([
+                "invitationStatus": GuestStatus.checkedIn.backendValue,
+                "checkedInAt": FieldValue.serverTimestamp(),
+                "updatedAt": FieldValue.serverTimestamp()
+            ], merge: true) { error in
+                DispatchQueue.main.async {
+                    if let error {
+                        print("⚠️ [EventManagementView] Check-in failed:", error)
+                        self.app.showEventToast("CHECK-IN FAILED")
+                        return
+                    }
+
+                    self.app.showEventToast("GUEST CHECKED IN")
+                }
+            }
+    }
+
 
     private var guestExportActions: some View {
         VStack(spacing: 10) {
@@ -3218,6 +3590,568 @@ private func sessionSpeakerPicker(selectedIDs: Binding<Set<String>>) -> some Vie
         return lines.joined(separator: "\n")
     }
 
+    private func communicationsCenterPanel(_ command: EventCommandSheet) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            communicationOpsSnapshot
+            communicationTemplatePicker
+            communicationAudiencePicker
+            communicationMessageComposer
+            communicationPreviewActions(command)
+        }
+    }
+
+    private var communicationOpsSnapshot: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("MESSAGE OPS")
+                    .font(.system(size: 10, weight: .black, design: .monospaced))
+                    .foregroundColor(.orange.opacity(0.92))
+                    .tracking(2)
+
+                Spacer()
+
+                Text(communicationIndividualGuest == nil ? "AUDIENCE MODE" : "INDIVIDUAL MODE")
+                    .font(.system(size: 8, weight: .black, design: .monospaced))
+                    .foregroundColor(.black.opacity(0.86))
+                    .padding(.horizontal, 9)
+                    .frame(height: 23)
+                    .background(Capsule().fill(Color.orange.opacity(0.96)))
+            }
+
+            Text(communicationIndividualGuest == nil ? "Choose an audience, apply a template, review the message, then send through the verified event communication pipeline." : "Send a personalized one-to-one event message to this attendee using the same event communication pipeline.")
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .foregroundColor(.white.opacity(0.58))
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 10) {
+                communicationMetric("AUDIENCE", communicationAudienceCount(communicationAudience), tint: .orange)
+                communicationMetric("ACCEPTED", communicationAudienceCount(.accepted), tint: .green)
+                communicationMetric("WAITLIST", communicationAudienceCount(.waitlist), tint: .orange)
+            }
+        }
+        .padding(16)
+        .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Color.orange.opacity(0.055)))
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Color.orange.opacity(0.14), lineWidth: 1))
+    }
+
+    private var communicationTemplatePicker: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("MESSAGE TEMPLATE")
+                .font(.system(size: 10, weight: .black, design: .monospaced))
+                .foregroundColor(.orange.opacity(0.92))
+                .tracking(2)
+
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                ForEach(CommunicationTemplate.allCases) { template in
+                    communicationChoiceTile(
+                        title: template.shortLabel,
+                        subtitle: template.rawValue,
+                        icon: template.icon,
+                        selected: communicationTemplate == template
+                    ) {
+                        communicationTemplate = template
+                        communicationSubject = defaultCommunicationSubject(template: template)
+                        commandNotes = communicationMessageBody(
+                            template: template,
+                            audience: communicationAudience,
+                            recipient: communicationIndividualGuest
+                        )
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Color.white.opacity(0.045)))
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Color.white.opacity(0.09), lineWidth: 1))
+    }
+
+    private var communicationAudiencePicker: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(communicationIndividualGuest == nil ? "AUDIENCE SEGMENT" : "INDIVIDUAL RECIPIENT")
+                .font(.system(size: 10, weight: .black, design: .monospaced))
+                .foregroundColor(.orange.opacity(0.92))
+                .tracking(2)
+
+            if let guest = communicationIndividualGuest {
+                individualRecipientCard(guest)
+            } else {
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                    ForEach(CommunicationAudience.allCases) { audience in
+                        communicationChoiceTile(
+                            title: audience.shortLabel,
+                            subtitle: "\(communicationAudienceCount(audience)) people",
+                            icon: audience.icon,
+                            selected: communicationAudience == audience
+                        ) {
+                            communicationAudience = audience
+                            commandNotes = communicationMessageBody(
+                                template: communicationTemplate,
+                                audience: audience,
+                                recipient: nil
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Color.white.opacity(0.045)))
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Color.white.opacity(0.09), lineWidth: 1))
+    }
+
+    private func individualRecipientCard(_ guest: GuestRecord) -> some View {
+        HStack(spacing: 12) {
+            speakerOrGuestAvatar(guest)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(guest.name.isEmpty ? "Guest" : guest.name)
+                    .font(.system(size: 13, weight: .black, design: .rounded))
+                    .foregroundColor(.white.opacity(0.94))
+                    .lineLimit(1)
+
+                Text(guest.email)
+                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    .foregroundColor(.white.opacity(0.52))
+                    .lineLimit(1)
+
+                Text("\(guest.role.rawValue.uppercased()) • \(guest.status.rawValue.uppercased())")
+                    .font(.system(size: 8, weight: .black, design: .monospaced))
+                    .foregroundColor(.orange.opacity(0.66))
+                    .tracking(0.6)
+            }
+
+            Spacer()
+
+            Text("1:1")
+                .font(.system(size: 8, weight: .black, design: .monospaced))
+                .foregroundColor(.black.opacity(0.86))
+                .padding(.horizontal, 8)
+                .frame(height: 22)
+                .background(Capsule().fill(Color.orange.opacity(0.96)))
+        }
+        .padding(12)
+        .background(RoundedRectangle(cornerRadius: 17, style: .continuous).fill(Color.black.opacity(0.34)))
+        .overlay(RoundedRectangle(cornerRadius: 17, style: .continuous).stroke(Color.orange.opacity(0.16), lineWidth: 1))
+    }
+
+    private func communicationChoiceTile(
+        title: String,
+        subtitle: String,
+        icon: String,
+        selected: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button {
+            HapticManager.instance.impact(.light)
+            SpatialAudioManager.shared.play(.uiTap)
+            action()
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: icon)
+                    .font(.system(size: 13, weight: .black))
+                    .foregroundColor(selected ? .black.opacity(0.86) : .orange.opacity(0.92))
+                    .frame(width: 30, height: 30)
+                    .background(Circle().fill(selected ? Color.orange.opacity(0.96) : Color.orange.opacity(0.10)))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.system(size: 9, weight: .black, design: .monospaced))
+                        .foregroundColor(selected ? .white.opacity(0.95) : .white.opacity(0.78))
+                        .tracking(0.7)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.68)
+
+                    Text(subtitle.uppercased())
+                        .font(.system(size: 8, weight: .black, design: .monospaced))
+                        .foregroundColor(.white.opacity(0.38))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.66)
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(11)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(selected ? Color.orange.opacity(0.10) : Color.black.opacity(0.30)))
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(selected ? Color.orange.opacity(0.24) : Color.white.opacity(0.06), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var communicationMessageComposer: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("MESSAGE PREVIEW")
+                .font(.system(size: 10, weight: .black, design: .monospaced))
+                .foregroundColor(.orange.opacity(0.92))
+                .tracking(2)
+
+            premiumTextField("Subject", text: $communicationSubject)
+
+            TextEditor(text: $commandNotes)
+                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .foregroundColor(.white.opacity(0.98))
+                .scrollContentBackground(.hidden)
+                .frame(minHeight: 210)
+                .padding(12)
+                .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.white.opacity(0.085)))
+                .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color.white.opacity(0.16), lineWidth: 1))
+        }
+        .padding(16)
+        .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Color.white.opacity(0.045)))
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Color.white.opacity(0.09), lineWidth: 1))
+    }
+
+    private func communicationPreviewActions(_ command: EventCommandSheet) -> some View {
+        VStack(spacing: 10) {
+            Button {
+                sendEventCommunication(testMode: false)
+            } label: {
+                commandActionLabel(
+                    isSendingCommunication
+                    ? "SENDING"
+                    : (communicationIndividualGuest == nil ? "SEND TO AUDIENCE" : "SEND TO ATTENDEE"),
+                    "paperplane.fill",
+                    filled: true
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(isSendingCommunication || !canSendCurrentCommunication)
+            .opacity((isSendingCommunication || !canSendCurrentCommunication) ? 0.55 : 1)
+        }
+    }
+
+    private var canSendCurrentCommunication: Bool {
+        if let guest = communicationIndividualGuest {
+            return !normalizedEmail(guest.email).isEmpty
+        }
+
+        return communicationAudienceCount(communicationAudience) > 0
+    }
+
+    private func sendEventCommunication(testMode: Bool) {
+        guard !isSendingCommunication else { return }
+
+        let eventID = currentEvent.id.trimmingCharacters(in: .whitespacesAndNewlines)
+        let subject = communicationSubject.trimmingCharacters(in: .whitespacesAndNewlines)
+        let body = commandNotes.trimmingCharacters(in: .whitespacesAndNewlines)
+        let individualGuest = communicationIndividualGuest
+
+        guard !eventID.isEmpty else {
+            app.showEventToast("EVENT NOT FOUND")
+            return
+        }
+
+        guard !subject.isEmpty else {
+            app.showEventToast("SUBJECT REQUIRED")
+            return
+        }
+
+        guard !body.isEmpty else {
+            app.showEventToast("MESSAGE REQUIRED")
+            return
+        }
+
+        if !testMode {
+            if let individualGuest {
+                guard !normalizedEmail(individualGuest.email).isEmpty else {
+                    app.showEventToast("EMAIL REQUIRED")
+                    return
+                }
+            } else if communicationAudienceCount(communicationAudience) == 0 {
+                app.showEventToast("NO RECIPIENTS")
+                return
+            }
+        }
+
+        isSendingCommunication = true
+
+        var payload: [String: Any] = [
+            "eventId": eventID,
+            "audience": communicationAudience.backendValue,
+            "template": communicationTemplate.backendValue,
+            "subject": subject,
+            "body": body,
+            "testMode": testMode,
+            "personalize": true,
+            "mode": individualGuest == nil ? "audience" : "individual"
+        ]
+
+        if let individualGuest {
+            payload["recipientGuestId"] = individualGuest.source == "crm" ? stableCRMGuestDocumentID(for: individualGuest) : ""
+            payload["recipientEmail"] = normalizedEmail(individualGuest.email)
+            payload["recipientName"] = individualGuest.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            payload["recipientRole"] = individualGuest.role.backendValue
+            payload["recipientOrganization"] = individualGuest.organization.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        Functions.functions(region: "us-central1")
+            .httpsCallable("sendEventCommunication")
+            .call(payload) { result, error in
+                DispatchQueue.main.async {
+                    self.isSendingCommunication = false
+
+                    if let error {
+                        print("⚠️ [EventManagementView] sendEventCommunication failed:", error)
+                        self.app.showEventToast(testMode ? "TEST SEND FAILED" : "SEND FAILED")
+                        return
+                    }
+
+                    let data = result?.data as? [String: Any]
+                    let sentCount = data?["sentCount"] as? Int ?? 0
+                    let failedCount = data?["failedCount"] as? Int ?? 0
+                    let status = (data?["status"] as? String ?? "").lowercased()
+
+                    if testMode {
+                        self.app.showEventToast(sentCount > 0 ? "TEST SENT" : "TEST FAILED")
+                    } else if failedCount > 0 {
+                        self.app.showEventToast("\(sentCount) SENT • \(failedCount) FAILED")
+                    } else if status == "sent" {
+                        if individualGuest != nil {
+                            self.app.showEventToast("MESSAGE SENT")
+                        } else {
+                            self.app.showEventToast(
+                                sentCount == 1
+                                ? "1 MESSAGE SENT"
+                                : "\(sentCount) MESSAGES SENT"
+                            )
+                        }
+                    } else {
+                        self.app.showEventToast("SEND FAILED")
+                    }
+
+                    self.communicationIndividualGuest = nil
+                    self.activeCommand = nil
+                }
+            }
+    }
+
+    private func stableCRMGuestDocumentID(for guest: GuestRecord) -> String {
+        currentCRMGuests.first {
+            normalizedEmail($0.email) == normalizedEmail(guest.email)
+        }?.id ?? ""
+    }
+
+    private func communicationMetric(_ title: String, _ value: Int, tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.system(size: 8, weight: .black, design: .monospaced))
+                .foregroundColor(tint.opacity(0.88))
+                .tracking(1)
+
+            Text("\(value)")
+                .font(.system(size: 15, weight: .black, design: .monospaced))
+                .foregroundColor(.white.opacity(0.94))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(11)
+        .background(RoundedRectangle(cornerRadius: 15, style: .continuous).fill(tint.opacity(0.08)))
+        .overlay(RoundedRectangle(cornerRadius: 15, style: .continuous).stroke(tint.opacity(0.16), lineWidth: 1))
+    }
+
+    private func isCommunicationCommand(_ command: EventCommandSheet) -> Bool {
+        switch command {
+        case .messageAttendees, .sendReminder, .messageWaitlist:
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func defaultCommunicationTemplate(for command: EventCommandSheet) -> CommunicationTemplate {
+        switch command {
+        case .sendReminder:
+            return .reminder
+        case .messageWaitlist:
+            return .finalCall
+        case .messageAttendees:
+            return .scheduleUpdate
+        default:
+            return .custom
+        }
+    }
+
+    private func defaultCommunicationAudience(for command: EventCommandSheet) -> CommunicationAudience {
+        switch command {
+        case .messageWaitlist:
+            return .waitlist
+        case .sendReminder, .messageAttendees:
+            return .accepted
+        default:
+            return .all
+        }
+    }
+
+    private func communicationAudienceCount(_ audience: CommunicationAudience) -> Int {
+        switch audience {
+        case .all:
+            return directoryGuestRecords.count
+        case .accepted:
+            return acceptedCRMCount + checkedInCRMCount
+        case .invited:
+            return invitedCRMCount
+        case .waitlist:
+            return currentEvent.waitlistCount
+        case .checkedIn:
+            return checkedInCRMCount
+        case .vip:
+            return directoryGuestRecords.filter { $0.isVIP || $0.role == .vip }.count
+        case .speakers:
+            return sessionSpeakerOptions.count
+        }
+    }
+
+    private func defaultCommunicationSubject(template: CommunicationTemplate) -> String {
+        switch template {
+        case .reminder:
+            return "Reminder: \(currentEvent.title)"
+        case .finalCall:
+            return "Final call: \(currentEvent.title)"
+        case .venueChange:
+            return "Venue update: \(currentEvent.title)"
+        case .scheduleUpdate:
+            return "Schedule update: \(currentEvent.title)"
+        case .checkInInstructions:
+            return "Check-in details: \(currentEvent.title)"
+        case .thankYou:
+            return "Thank you for joining \(currentEvent.title)"
+        case .custom:
+            return currentEvent.title
+        }
+    }
+
+    private func communicationMessageBody(
+        template: CommunicationTemplate,
+        audience: CommunicationAudience,
+        recipient: GuestRecord? = nil
+    ) -> String {
+        let title = currentEvent.title
+        let dateLine = eventDateLine(currentEvent)
+        let greetingName = recipientFirstName(recipient)
+        let greeting = greetingName.isEmpty ? "Hi {{firstName}}," : "Hi \(greetingName),"
+
+        switch template {
+        case .reminder:
+            return """
+            \(greeting)
+
+            This is a reminder that you’re confirmed for \(title).
+
+            Event timing:
+            \(dateLine)
+
+            Please check your event details before arrival. We’ll share any final access instructions if anything changes.
+
+            — Trivia GOAT
+            """
+
+        case .finalCall:
+            return """
+            \(greeting)
+
+            Final call for \(title).
+
+            Timing:
+            \(dateLine)
+
+            If you plan to attend, please confirm your event details now. Capacity and waitlist movement will be handled through the event system.
+
+            — Trivia GOAT
+            """
+
+        case .venueChange:
+            return """
+            \(greeting)
+
+            Venue details for \(title) have been updated.
+
+            Current event timing:
+            \(dateLine)
+
+            Please review the latest event page before arrival and use the newest location/access instructions.
+
+            — Trivia GOAT
+            """
+
+        case .scheduleUpdate:
+            return """
+            \(greeting)
+
+            There is a schedule update for \(title).
+
+            Current timing:
+            \(dateLine)
+
+            Please review the latest agenda and event details before the event begins.
+
+            — Trivia GOAT
+            """
+
+        case .checkInInstructions:
+            return """
+            \(greeting)
+
+            Check-in instructions for \(title):
+
+            1. Arrive with your RSVP confirmation ready.
+            2. Check in with event staff on arrival.
+            3. Follow speaker/session timing from the event agenda.
+
+            Event timing:
+            \(dateLine)
+
+            — Trivia GOAT
+            """
+
+        case .thankYou:
+            return """
+            \(greeting)
+
+            Thank you for joining \(title).
+
+            We appreciate you being part of the Trivia GOAT event experience. Watch for follow-up details, recaps, or future event announcements.
+
+            — Trivia GOAT
+            """
+
+        case .custom:
+            return """
+            \(greeting)
+
+            Update for \(title):
+
+            [Write your message here.]
+
+            Event timing:
+            \(dateLine)
+
+            — Trivia GOAT
+            """
+        }
+    }
+
+    private func communicationExportText() -> String {
+        """
+        To: \(communicationAudience.rawValue) (\(communicationAudienceCount(communicationAudience)))
+        Subject: \(communicationSubject)
+
+        \(commandNotes)
+        """
+    }
+
+    private func recipientFirstName(_ recipient: GuestRecord?) -> String {
+        guard let recipient else { return "" }
+
+        let cleaned = recipient.name
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !cleaned.isEmpty else { return "" }
+
+        return cleaned
+            .split(separator: " ")
+            .first
+            .map(String.init) ?? cleaned
+    }
+
     private func commandNotesEditor(_ command: EventCommandSheet) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("COMMAND NOTES")
@@ -3321,11 +4255,11 @@ private func sessionSpeakerPicker(selectedIDs: Binding<Set<String>>) -> some Vie
         case .guestPanel:
             return "Add guests manually or import from Contacts, then stage invitations with locked admin-assigned roles."
         case .messageAttendees:
-            return "Draft an update for confirmed attendees."
+            return "Segment an audience, choose a template, preview, and prepare an event update."
         case .sendReminder:
-            return "Prepare a reminder message for event timing, access, and next steps."
+            return "Prepare a reminder with timing, access, check-in, and agenda details."
         case .messageWaitlist:
-            return "Draft a waitlist update for overflow demand and capacity movement."
+            return "Prepare a waitlist notice for capacity pressure and access movement."
         }
     }
 
@@ -3355,7 +4289,7 @@ private func sessionSpeakerPicker(selectedIDs: Binding<Set<String>>) -> some Vie
         case .sessionBuilder: return "SESSIONS READY"
         case .delegateDirectory: return "DELEGATES READY"
         case .guestPanel: return "GUEST PANEL READY"
-        case .messageAttendees: return "ATTENDEE MESSAGE READY"
+        case .messageAttendees: return "MESSAGE READY"
         case .sendReminder: return "REMINDER READY"
         case .messageWaitlist: return "WAITLIST MESSAGE READY"
         }
@@ -3555,6 +4489,11 @@ extension EventManagementView {
         var status: String
     }
 }
+
+
+
+
+
 
 
 
