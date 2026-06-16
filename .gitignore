@@ -14,3 +14,7 @@ TriviaGoatFirebase/*client_secret*.json
 .env
 .env.*
 GoogleService-Info-*.plist
+
+# Secrets
+TriviaGoatFirebase/*client_secret*.json
+TriviaGoatFirebase/serviceAccountKey.json

@@ -38,7 +38,7 @@ final class LeaderboardLiveService: ObservableObject {
     func start(limit: Int = 25) {
         stop()
 
-        listener = Firestore.firestore()
+        listener = FirestoreService.db
             .collection("leaderboard")
             .document("global")
             .collection("top")

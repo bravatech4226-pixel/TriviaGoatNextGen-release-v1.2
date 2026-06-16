@@ -100,7 +100,13 @@ struct TriviaGoatNextGenApp: App {
 
                 guard !didBootPro else { return }
                 didBootPro = true
-                Task { await ProManager.shared.boot() }
+
+                Task {
+                    await ProManager.shared.boot()
+                }
+            }
+            .onOpenURL { url in
+                appState.handleIncomingEventURL(url)
             }
         }
     }

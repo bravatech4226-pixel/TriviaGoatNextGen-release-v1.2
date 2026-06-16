@@ -130,7 +130,7 @@ struct PushDebugView: View {
         defer { isRefreshing = false }
 
         do {
-            let snap = try await Firestore.firestore()
+            let snap = try await FirestoreService.db
                 .collection("users")
                 .document(uid)
                 .getDocument()

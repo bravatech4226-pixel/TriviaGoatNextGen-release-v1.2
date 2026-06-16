@@ -196,9 +196,19 @@ struct ArenaView: View {
                             )
 
                             CommandCardV2(
+                                hasUnreadEvents: appRef.hasUnreadEvents,
                                 onMissions: {
                                     SpatialAudioManager.shared.play(.uiTap)
                                     appRef.startDailyMissionRun()
+                                },
+                                onEvents: {
+                                    SpatialAudioManager.shared.play(.uiTap)
+                                    HapticManager.instance.impact(.light)
+
+                                    withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                                        appRef.openEventsFromArena()
+                                        appRef.markEventsRead()
+                                    }
                                 },
                                 onResults: {
                                     SpatialAudioManager.shared.play(.uiTap)
@@ -982,10 +992,6 @@ private struct TrainingCardV2: View {
                     .foregroundColor(.white.opacity(0.6))
 
                 Spacer()
-
-                Text(gateText)
-                    .font(DS.Typography.font(16, weight: .black, design: .rounded, cappedAt: 20))
-                    .foregroundColor(.white)
             }
         }
         .tacticalPanel()
@@ -1024,7 +1030,9 @@ private struct BattleEntryCardV2: View {
 }
 
 private struct CommandCardV2: View {
+    let hasUnreadEvents: Bool
     let onMissions: () -> Void
+    let onEvents: () -> Void
     let onResults: () -> Void
 
     var body: some View {
@@ -1037,6 +1045,28 @@ private struct CommandCardV2: View {
                 title: "arena.command.missions".localized,
                 subtitle: "arena.command.missions_subtitle".localized,
                 action: onMissions
+            )
+
+            HubRowV2(
+                icon: "calendar",
+                iconTint: .orange,
+                title: "EVENTS",
+                subtitle: hasUnreadEvents
+                    ? "New event updates available"
+                    : "Launches, tournaments, and live drops",
+                action: onEvents
+            )
+            .overlay(
+                hasUnreadEvents ?
+                    Text("NEW")
+                    .font(DS.Typography.font(9, weight: .black, design: .monospaced, cappedAt: 11))
+                    .foregroundColor(.black)
+                    .padding(.vertical, 4)
+                    .padding(.horizontal, 8)
+                    .background(Capsule().fill(Color.orange))
+                    .padding(10)
+                    : nil,
+                alignment: .topTrailing
             )
 
             HubRowV2(

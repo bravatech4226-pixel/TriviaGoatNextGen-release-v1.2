@@ -33,7 +33,7 @@ final class PushTokenManager: NSObject, UNUserNotificationCenterDelegate {
 
     private func saveTokenToUser(_ token: String) {
         guard let uid = Auth.auth().currentUser?.uid else { return }
-        Firestore.firestore().collection("users").document(uid).setData(
+        FirestoreService.db.collection("users").document(uid).setData(
             ["fcmToken": token],
             merge: true
         )

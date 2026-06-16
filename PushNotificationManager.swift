@@ -2,8 +2,6 @@
 //  PushNotificationManager.swift
 //  TriviaGoatNextGen
 //
-//  Created by Michael Houlder on 2026-02-12.
-//
 
 import Foundation
 import FirebaseAuth
@@ -12,7 +10,6 @@ import FirebaseMessaging
 @preconcurrency import UserNotifications
 import UIKit
 
-// MARK: - App push route event
 extension Notification.Name {
     static let tgPushRoute = Notification.Name("tg.push.route")
 }
@@ -32,8 +29,6 @@ final class PushNotificationManager: NSObject {
     private var hasAPNSToken = false
     private var lastSyncedFCMToken: String?
     private var pendingFCMToken: String?
-
-    // MARK: - Public
 
     func configure() {
         UNUserNotificationCenter.current().delegate = self
@@ -76,17 +71,13 @@ final class PushNotificationManager: NSObject {
 
         guard hasAPNSToken else {
             pendingFCMToken = cleaned
-
-            if DebugLog.verbose {
-                print("🟨 [Push] Holding FCM token until APNS token is available.")
-            }
             return
         }
 
         syncFCMTokenIfNeeded(cleaned)
         #endif
     }
-    
+
     func syncTokenForCurrentUserIfPossible() {
         #if targetEnvironment(simulator)
         return
@@ -105,7 +96,6 @@ final class PushNotificationManager: NSObject {
         }
         #endif
     }
-    // MARK: - Private
 
     private func requestPermissionIfNeeded() {
         guard !hasRequestedPermission else { return }
@@ -142,7 +132,6 @@ final class PushNotificationManager: NSObject {
         }
     }
 
-
     private func flushPendingFCMTokenIfPossible() {
         guard hasAPNSToken else { return }
 
@@ -153,6 +142,7 @@ final class PushNotificationManager: NSObject {
 
         syncTokenForCurrentUserIfPossible()
     }
+
     private func syncFCMTokenIfNeeded(_ token: String) {
         let cleaned = token.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleaned.isEmpty else { return }
@@ -160,23 +150,19 @@ final class PushNotificationManager: NSObject {
 
         guard let uid = Auth.auth().currentUser?.uid else {
             pendingFCMToken = cleaned
-
-            if DebugLog.verbose {
-                print("🟨 [Push] Holding FCM token until authenticated user is available.")
-            }
             return
         }
 
         lastSyncedFCMToken = cleaned
         pendingFCMToken = nil
 
-        Firestore.firestore()
+        FirestoreService.db
             .collection("users")
             .document(uid)
             .setData(
                 [
                     "fcmToken": cleaned,
-                    "updatedAt": FieldValue.serverTimestamp(),
+                    "updatedAt": FieldValue.serverTimestamp()
                 ],
                 merge: true
             )
@@ -185,9 +171,38 @@ final class PushNotificationManager: NSObject {
             print("✅ [Push] FCM token synced for uid: \(uid)")
         }
     }
-}
 
-// MARK: - UNUserNotificationCenterDelegate
+    private func routeNotificationTap(userInfo: [AnyHashable: Any]) {
+        let type = (userInfo["type"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased() ?? ""
+
+        let eventID = (userInfo["eventID"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let eventURL = (userInfo["eventURL"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        var routePayload: [String: Any] = [
+            "type": type,
+            "payload": userInfo
+        ]
+
+        if let eventID, !eventID.isEmpty {
+            routePayload["eventID"] = eventID
+        }
+
+        if let eventURL, !eventURL.isEmpty {
+            routePayload["eventURL"] = eventURL
+        }
+
+        NotificationCenter.default.post(
+            name: .tgPushRoute,
+            object: nil,
+            userInfo: routePayload
+        )
+    }
+}
 
 extension PushNotificationManager: UNUserNotificationCenterDelegate {
 
@@ -204,20 +219,13 @@ extension PushNotificationManager: UNUserNotificationCenterDelegate {
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
-        let userInfo = response.notification.request.content.userInfo
-        let type = (userInfo["type"] as? String) ?? ""
-
-        NotificationCenter.default.post(
-            name: .tgPushRoute,
-            object: nil,
-            userInfo: ["type": type, "payload": userInfo]
+        routeNotificationTap(
+            userInfo: response.notification.request.content.userInfo
         )
 
         completionHandler()
     }
 }
-
-// MARK: - MessagingDelegate
 
 extension PushNotificationManager: MessagingDelegate {
 

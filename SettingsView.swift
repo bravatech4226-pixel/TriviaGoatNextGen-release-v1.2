@@ -38,6 +38,7 @@ struct SettingsView: View {
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 16) {
                         profilePanel(appRef: appRef)
+                        eventOpsPanel(appRef: appRef)
                         readabilityPanel()
                         audioPanel()
                         sharePanel()
@@ -161,6 +162,7 @@ private extension SettingsView {
         avatarChoices.first {
             $0.style == selectedAvatarStyle && $0.seed == selectedAvatarSeed
         } ?? AvatarChoice.defaultChoice
+        
     }
 
     func avatarURL(for choice: AvatarChoice) -> URL? {
@@ -311,6 +313,33 @@ private extension SettingsView {
                     rowInfoChip(title: "AVATAR FLEX", systemImage: "sparkles")
                 }
             }
+        }
+        .tacticalPanel()
+    }
+    
+    func eventOpsPanel(appRef: AppState) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionEyebrow("EVENT OPS")
+
+            Button {
+                HapticManager.instance.impact(.light)
+                playSettingsTap()
+
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                    appRef.setRoute(.creatorConsole)
+                }
+            } label: {
+                rowButton(
+                    title: "CREATOR CONSOLE",
+                    systemImage: "calendar.badge.plus"
+                )
+            }
+            .buttonStyle(.plain)
+
+            Text("Create drafts, manage approved events, and prepare attendee operations.")
+                .font(DS.Typography.font(12, weight: .semibold, design: .rounded, cappedAt: 15))
+                .foregroundColor(.white.opacity(0.58))
+                .fixedSize(horizontal: false, vertical: true)
         }
         .tacticalPanel()
     }
